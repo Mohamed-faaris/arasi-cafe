@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arasi Cafe</title>
+  <meta name="description" content="Arasi Cafe — Coming Soon">
+  <meta name="theme-color" content="#f5f2ed">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Arasi">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:opsz,wght@9..40,200;9..40,300;9..40,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #f5f2ed;
+      --fg: #1c1c1c;
+      --muted: #b8a99a;
+      --line: #e2dbd3;
+    }
+
+    body {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      padding: 2rem;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 28rem;
+      width: 100%;
+    }
+
+    .rule {
+      width: 2.5rem;
+      height: 1px;
+      background: var(--line);
+      margin: 0 auto 3rem;
+      animation: fadeIn 1.2s ease both;
+    }
+
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: clamp(2.8rem, 8vw, 4.5rem);
+      letter-spacing: 0.06em;
+      color: var(--fg);
+      margin-bottom: 1rem;
+      animation: fadeIn 1.2s ease 0.1s both;
+    }
+
+    .sub {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.35em;
+      color: var(--muted);
+      font-weight: 300;
+      margin-bottom: 3.5rem;
+      animation: fadeIn 1.2s ease 0.2s both;
+    }
+
+    form {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.5rem;
+      animation: fadeIn 1.2s ease 0.3s both;
+    }
+
+    input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      font-size: 0.85rem;
+      color: var(--fg);
+      outline: none;
+      padding: 0.25rem 0;
+    }
+
+    input::placeholder {
+      color: var(--muted);
+      font-weight: 200;
+      letter-spacing: 0.02em;
+    }
+
+    button {
+      border: none;
+      background: transparent;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--fg);
+      cursor: pointer;
+      padding: 0.25rem 0;
+      opacity: 0.5;
+      transition: opacity 0.3s ease;
+    }
+
+    button:hover {
+      opacity: 1;
+    }
+
+    .footer {
+      margin-top: 4rem;
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-weight: 200;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      animation: fadeIn 1.2s ease 0.4s both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="rule"></div>
+    <h1>Arasi Cafe</h1>
+    <p class="sub">Coming Soon</p>
+    <form id="notify-form">
+      <input type="email" placeholder="your email" aria-label="Email address" required>
+      <button type="submit">Notify Me</button>
+    </form>
+    <p class="footer">Chennai</p>
+  </div>
+  <script>
+    document.getElementById('notify-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const email = this.querySelector('input').value;
+      const btn = this.querySelector('button');
+      btn.textContent = 'Got it';
+      btn.style.opacity = '1';
+      this.querySelector('input').value = '';
+      setTimeout(() => { btn.textContent = 'Notify Me'; }, 2000);
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
