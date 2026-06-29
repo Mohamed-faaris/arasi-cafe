@@ -5,19 +5,23 @@ import {
   ArrowLeft, Plus, CreditCard, Phone, MessageCircle, Share2,
   Receipt, ChevronRight, MapPin, Hash, Trash2, Edit3,
 } from "lucide-react";
-import { useStore, formatCurrency, formatDate } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatDate } from "../lib/utils";
 import { toast } from "sonner";
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { state, dispatch } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
+  const deleteVendor = useMutation(api.vendors.deleteVendor);
   const [tab, setTab] = useState<"all" | "bills" | "payments">("all");
 
-  const vendor = useMemo(() => state.vendors.find((v) => v._id === id), [state.vendors, id]);
-  const transactions = useMemo(() =>
-    state.transactions.filter((t) => t.vendorId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [state.transactions, id]
+  const vendor = useMemo(() => vendors.find((v) => v._id === id), [vendors, id]);
+  const vendorTxs = useMemo(() =>
+    transactions.filter((t) => t.vendorId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [transactions, id]
   );
 
   if (!vendor) {
@@ -29,16 +33,16 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const bills = transactions.filter((t) => t.type === "bill");
-  const payments = transactions.filter((t) => t.type === "payment");
+  const bills = vendorTxs.filter((t) => t.type === "bill");
+  const payments = vendorTxs.filter((t) => t.type === "payment");
   const totalBilled = bills.reduce((s, t) => s + t.amount, 0);
   const totalPaid = payments.reduce((s, t) => s + t.amount, 0);
 
-  const visible = tab === "all" ? transactions : tab === "bills" ? bills : payments;
+  const visible = tab === "all" ? vendorTxs : tab === "bills" ? bills : payments;
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm(`Delete ${vendor.name} and all their transactions?`)) {
-      dispatch({ type: "DELETE_VENDOR", id: vendor._id });
+      await deleteVendor({ id: vendor._id });
       toast.error("Customer deleted");
       navigate("/customers");
     }
@@ -53,7 +57,6 @@ export default function CustomerDetailPage() {
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="pb-6">
-      {/* Header */}
       <div className="bg-gradient-to-b from-[#FFF8F4] to-white px-5 pt-12 pb-5">
         <div className="flex items-center justify-between mb-5">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
@@ -69,7 +72,6 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        {/* Profile */}
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-[#8B1E24]/10 border border-[#8B1E24]/20 flex items-center justify-center font-bold text-[#8B1E24] text-xl">
             {vendor.avatar}
@@ -95,7 +97,6 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        {/* Outstanding amount */}
         <div className={`mt-4 rounded-2xl p-4 ${vendor.dueAmount > 0 ? "bg-[#8B1E24]" : "bg-[#16A34A]"}`}>
           <p className="text-xs font-semibold text-white/70 uppercase tracking-wider">Outstanding Balance</p>
           <p className="text-3xl font-bold text-white mt-1">{formatCurrency(vendor.dueAmount)}</p>
@@ -104,7 +105,6 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
-        {/* Stats row */}
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div className="bg-white border border-[#EDE0DB] rounded-xl p-3 shadow-sm">
             <p className="text-xs text-[#6B4C4F] font-medium">Total Billed</p>
@@ -116,7 +116,6 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        {/* Action buttons */}
         <div className="flex gap-2.5 mt-3">
           <motion.button
             whileTap={{ scale: 0.96 }}
@@ -141,7 +140,6 @@ export default function CustomerDetailPage() {
           </motion.button>
         </div>
 
-        {/* Contact shortcuts */}
         <div className="flex gap-2.5 mt-2">
           <a href={`tel:${vendor.phone}`} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-[#EDE0DB] rounded-xl py-2.5 text-xs font-semibold text-[#6B4C4F] shadow-sm">
             <Phone size={13} /> Call
@@ -152,7 +150,6 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* Transaction tabs */}
       <div className="px-5 mt-5">
         <div className="flex gap-2 mb-4">
           {(["all", "bills", "payments"] as const).map((t) => (
@@ -166,7 +163,6 @@ export default function CustomerDetailPage() {
           ))}
         </div>
 
-        {/* Transaction list */}
         <div className="space-y-2.5">
           {visible.length === 0 ? (
             <div className="text-center py-10">

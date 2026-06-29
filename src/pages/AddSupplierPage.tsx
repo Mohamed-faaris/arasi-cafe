@@ -2,27 +2,33 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft } from "lucide-react";
-import { useStore } from "../data/store";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { getInitials } from "../lib/utils";
 import { toast } from "sonner";
 
 export default function AddSupplierPage() {
   const navigate = useNavigate();
-  const { dispatch } = useStore();
+  const createSupplier = useMutation(api.suppliers.createSupplier);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) { toast.error("Supplier name is required"); return; }
     if (!phone.trim()) { toast.error("Phone number is required"); return; }
-    dispatch({ type: "ADD_SUPPLIER", supplier: { name: name.trim(), phone: phone.trim(), address: address.trim() || undefined } });
+    await createSupplier({
+      name: name.trim(),
+      phone: phone.trim(),
+      avatar: getInitials(name.trim()),
+      address: address.trim() || undefined,
+    });
     toast.success("Supplier added");
     navigate("/suppliers");
   };
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="pb-10">
-      {/* Header */}
       <div className="px-5 pt-12 pb-5 bg-gradient-to-b from-[#FFF8F4] to-white border-b border-[#EDE0DB]">
         <div className="flex items-center gap-3 mb-1">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">

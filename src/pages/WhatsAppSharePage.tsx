@@ -2,15 +2,18 @@ import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft, Send } from "lucide-react";
-import { useStore, formatDate } from "../data/store";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatDate } from "../lib/utils";
 
 export default function WhatsAppSharePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { state } = useStore();
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
 
-  const tx = useMemo(() => state.transactions.find((t) => t._id === id), [state.transactions, id]);
-  const vendor = useMemo(() => tx ? state.vendors.find((v) => v._id === tx.vendorId) : null, [state.vendors, tx]);
+  const tx = useMemo(() => transactions.find((t) => t._id === id), [transactions, id]);
+  const vendor = useMemo(() => tx ? vendors.find((v) => v._id === tx.vendorId) : null, [vendors, tx]);
 
   const message = useMemo(() => {
     if (!tx || !vendor) return "";

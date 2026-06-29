@@ -2,16 +2,20 @@ import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft, CreditCard, Share2, Printer, Trash2, User, Calendar, FileText } from "lucide-react";
-import { useStore, formatCurrency, formatDate } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatDate } from "../lib/utils";
 import { toast } from "sonner";
 
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { state, dispatch } = useStore();
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const deleteTransaction = useMutation(api.transactions.deleteTransaction);
 
-  const tx = useMemo(() => state.transactions.find((t) => t._id === id), [state.transactions, id]);
-  const vendor = useMemo(() => tx ? state.vendors.find((v) => v._id === tx.vendorId) : null, [state.vendors, tx]);
+  const tx = useMemo(() => transactions.find((t) => t._id === id), [transactions, id]);
+  const vendor = useMemo(() => tx ? vendors.find((v) => v._id === tx.vendorId) : null, [vendors, tx]);
 
   if (!tx || tx.type !== "bill") {
     return (
@@ -28,9 +32,9 @@ export default function BillDetailPage() {
     return s + sub * ((i.cgst + i.sgst) / 100);
   }, 0);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm("Delete this bill?")) {
-      dispatch({ type: "DELETE_TRANSACTION", id: tx._id });
+      await deleteTransaction({ id: tx._id });
       toast.error("Bill deleted");
       navigate(-1);
     }
@@ -45,7 +49,6 @@ export default function BillDetailPage() {
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="pb-8">
-      {/* Header */}
       <div className="px-5 pt-12 pb-5 bg-gradient-to-b from-[#FFF8F4] to-white border-b border-[#EDE0DB]">
         <div className="flex items-center justify-between">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
@@ -59,7 +62,6 @@ export default function BillDetailPage() {
       </div>
 
       <div className="px-5 pt-5 space-y-4">
-        {/* Bill header card */}
         <div className="bg-[#8B1E24] rounded-2xl p-5">
           <div className="flex items-start justify-between">
             <div>
@@ -75,7 +77,6 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        {/* Info rows */}
         <div className="bg-white border border-[#EDE0DB] rounded-2xl shadow-sm overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[#EDE0DB]">
             <div className="w-8 h-8 rounded-lg bg-[#FFF8F4] flex items-center justify-center">
@@ -108,12 +109,10 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        {/* Items table */}
         {tx.items && tx.items.length > 0 && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Items</p>
             <div className="bg-white border border-[#EDE0DB] rounded-2xl shadow-sm overflow-hidden">
-              {/* Header */}
               <div className="flex items-center px-4 py-2.5 bg-[#F9F6F2] border-b border-[#EDE0DB]">
                 <p className="flex-1 text-xs font-bold text-[#6B4C4F] uppercase tracking-wider">Product</p>
                 <p className="w-10 text-xs font-bold text-[#6B4C4F] text-center">Qty</p>
@@ -139,7 +138,6 @@ export default function BillDetailPage() {
                   </div>
                 );
               })}
-              {/* Totals */}
               <div className="border-t border-[#EDE0DB] px-4 py-3 bg-[#F9F6F2]">
                 <div className="flex justify-between text-xs text-[#6B4C4F] mb-1">
                   <span>Subtotal</span><span>₹{subtotal.toFixed(0)}</span>
@@ -157,7 +155,6 @@ export default function BillDetailPage() {
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex gap-2.5">
           <motion.button
             whileTap={{ scale: 0.96 }}

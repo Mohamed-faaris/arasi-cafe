@@ -2,39 +2,41 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Plus, Package, X, Edit3, Trash2 } from "lucide-react";
-import { useStore, formatCurrency } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency } from "../lib/utils";
 import { toast } from "sonner";
 
 type Cat = "all" | "A" | "B";
 
 export default function ProductListPage() {
   const navigate = useNavigate();
-  const { state, dispatch } = useStore();
+  const products = useQuery(api.products.getProducts) ?? [];
+  const deleteProduct = useMutation(api.products.deleteProduct);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState<Cat>("all");
 
   const filtered = useMemo(() => {
-    let list = [...state.products];
+    let list = [...products];
     if (search) list = list.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
     if (cat !== "all") list = list.filter((p) => p.type === cat);
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [state.products, search, cat]);
+  }, [products, search, cat]);
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Delete "${name}"?`)) {
-      dispatch({ type: "DELETE_PRODUCT", id });
+      await deleteProduct({ id: id as any });
       toast.error("Product deleted");
     }
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pb-6 relative">
-      {/* Header */}
       <div className="px-5 pt-12 pb-4 bg-white sticky top-0 z-10 border-b border-[#EDE0DB]">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-xl font-bold text-[#1A0A0C]">Products</h1>
-            <p className="text-xs text-[#6B4C4F] mt-0.5">{state.products.length} products in catalog</p>
+            <p className="text-xs text-[#6B4C4F] mt-0.5">{products.length} products in catalog</p>
           </div>
           <motion.button
             whileTap={{ scale: 0.92 }}
@@ -45,7 +47,6 @@ export default function ProductListPage() {
           </motion.button>
         </div>
 
-        {/* Search */}
         <div className="flex items-center gap-2 bg-[#F9F6F2] rounded-xl px-3.5 py-2.5 border border-[#EDE0DB] mb-3">
           <Search size={15} className="text-[#6B4C4F]" />
           <input
@@ -56,12 +57,8 @@ export default function ProductListPage() {
           />
           {search && <button onClick={() => setSearch("")}><X size={14} className="text-[#6B4C4F]" /></button>}
         </div>
-
-        {/* Category chips */}
-        
       </div>
 
-      {/* Product cards */}
       <div className="px-5 pt-4 space-y-2">
         <AnimatePresence mode="popLayout">
           {filtered.length === 0 ? (
@@ -109,7 +106,6 @@ export default function ProductListPage() {
         </AnimatePresence>
       </div>
 
-      {/* FAB */}
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}

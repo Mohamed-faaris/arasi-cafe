@@ -2,16 +2,19 @@ import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft } from "lucide-react";
-import { useStore } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { toast } from "sonner";
 
 export default function AddEditProductPage() {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
-  const { state, dispatch } = useStore();
+  const products = useQuery(api.products.getProducts) ?? [];
+  const createProduct = useMutation(api.products.createProduct);
+  const updateProduct = useMutation(api.products.updateProduct);
   const isEdit = Boolean(id);
 
-  const existing = useMemo(() => id ? state.products.find((p) => p._id === id) : null, [state.products, id]);
+  const existing = useMemo(() => id ? products.find((p) => p._id === id) : null, [products, id]);
 
   const [form, setForm] = useState({
     name: existing?.name || "",
@@ -36,7 +39,7 @@ export default function AddEditProductPage() {
     return errs;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
@@ -52,10 +55,10 @@ export default function AddEditProductPage() {
     };
 
     if (isEdit && existing) {
-      dispatch({ type: "UPDATE_PRODUCT", product: { ...existing, ...product } });
+      await updateProduct({ id: existing._id, ...product });
       toast.success("Product updated!");
     } else {
-      dispatch({ type: "ADD_PRODUCT", product: product as any });
+      await createProduct(product);
       toast.success("Product added!");
     }
     navigate("/products");
@@ -70,7 +73,6 @@ export default function AddEditProductPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pb-10">
-      {/* Header */}
       <div className="px-5 pt-12 pb-5 bg-gradient-to-b from-[#FFF8F4] to-white border-b border-[#EDE0DB]">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
@@ -84,17 +86,12 @@ export default function AddEditProductPage() {
       </div>
 
       <div className="px-5 mt-6 space-y-5">
-        {/* Category selector */}
-        
-
-        {/* Product name */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Product Name *</p>
           <input value={form.name} onChange={set("name")} placeholder="e.g. Full Cream Milk" className={inputCls("name")} />
           {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
         </div>
 
-        {/* Unit of measure */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Unit of Measure</p>
           <div className="flex gap-2">
@@ -111,7 +108,6 @@ export default function AddEditProductPage() {
           <input value={form.uom} onChange={set("uom")} placeholder="or type custom unit" className={`${inputCls("uom")} mt-2`} />
         </div>
 
-        {/* Prices */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Selling Price *</p>
@@ -131,7 +127,6 @@ export default function AddEditProductPage() {
           </div>
         </div>
 
-        {/* Margin indicator */}
         {margin && (
           <div className="bg-[#F0FDF4] border border-green-100 rounded-xl px-4 py-3 flex justify-between items-center">
             <p className="text-sm text-[#16A34A] font-medium">Profit Margin</p>
@@ -139,13 +134,11 @@ export default function AddEditProductPage() {
           </div>
         )}
 
-        {/* Default qty */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Default Quantity</p>
           <input value={form.defaultQty} onChange={set("defaultQty")} type="number" min="0.5" step="0.5" className={inputCls("defaultQty")} />
         </div>
 
-        {/* Tax */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">CGST %</p>
@@ -161,7 +154,6 @@ export default function AddEditProductPage() {
         )}
       </div>
 
-      {/* Save */}
       <div className="px-5 mt-8 space-y-3">
         <motion.button
           whileTap={{ scale: 0.97 }}

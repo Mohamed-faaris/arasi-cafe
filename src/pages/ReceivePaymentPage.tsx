@@ -2,15 +2,19 @@ import { useState, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { motion, useMotionValue, useTransform, animate } from "motion/react";
 import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
-import { useStore, formatCurrency } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency } from "../lib/utils";
 import { toast } from "sonner";
+import type { Id } from "../convex/_generated/dataModel";
 
 const METHODS = ["Cash", "UPI", "Card", "Bank Transfer", "Cheque"];
 
 export default function ReceivePaymentPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { state, dispatch } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const createTransaction = useMutation(api.transactions.createTransaction);
 
   const preId = searchParams.get("customerId") || "";
   const [customerId, setCustomerId] = useState(preId);
@@ -21,7 +25,7 @@ export default function ReceivePaymentPage() {
   const [whatsapp, setWhatsapp] = useState(false);
   const [sliding, setSliding] = useState(false);
 
-  const vendor = useMemo(() => state.vendors.find((v) => v._id === customerId), [state.vendors, customerId]);
+  const vendor = useMemo(() => vendors.find((v) => v._id === customerId), [vendors, customerId]);
   const outstanding = vendor?.dueAmount || 0;
 
   const numAmount = parseFloat(amount) || 0;
@@ -32,28 +36,24 @@ export default function ReceivePaymentPage() {
     setAmount(String(suggested));
   };
 
-  // Slide-to-confirm
   const sliderX = useMotionValue(0);
   const trackRef = useRef<HTMLDivElement>(null);
   const KNOB = 56;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!customerId) { toast.error("Select a customer"); return; }
     if (numAmount <= 0) { toast.error("Enter a valid amount"); return; }
     if (numAmount > outstanding + 0.01) { toast.error("Amount exceeds outstanding balance"); return; }
 
-    dispatch({
-      type: "ADD_TRANSACTION",
-      transaction: {
-        type: "payment",
-        vendorId: customerId,
-        vendorName: vendor!.name,
-        amount: numAmount,
-        profit: 0,
-        date: new Date().toISOString(),
-        notes: notes.trim() || undefined,
-        paymentMethod: method,
-      },
+    await createTransaction({
+      type: "payment",
+      vendorId: customerId as Id<"vendors">,
+      vendorName: vendor!.name,
+      amount: numAmount,
+      profit: 0,
+      date: new Date().toISOString(),
+      notes: notes.trim() || undefined,
+      paymentMethod: method,
     });
 
     if (whatsapp && vendor) {
@@ -80,7 +80,6 @@ export default function ReceivePaymentPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pb-10 min-h-screen">
-      {/* Header */}
       <div className="px-5 pt-12 pb-5 bg-gradient-to-b from-[#FFF8F4] to-white border-b border-[#EDE0DB]">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
@@ -94,7 +93,6 @@ export default function ReceivePaymentPage() {
       </div>
 
       <div className="px-5 pt-5 space-y-5">
-        {/* Customer selector */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Customer</p>
           {vendor ? (
@@ -114,7 +112,7 @@ export default function ReceivePaymentPage() {
           ) : (
             <div className="space-y-1">
               <div className="bg-white border border-[#EDE0DB] rounded-xl shadow-sm overflow-hidden max-h-52 overflow-y-auto">
-                {state.vendors.filter((v) => v.dueAmount > 0).map((v) => (
+                {vendors.filter((v) => v.dueAmount > 0).map((v) => (
                   <button
                     key={v._id}
                     onClick={() => { setCustomerId(v._id); setShowCustomers(false); }}
@@ -137,7 +135,6 @@ export default function ReceivePaymentPage() {
 
         {vendor && (
           <>
-            {/* Outstanding summary */}
             <div className="bg-[#8B1E24] rounded-2xl p-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -153,7 +150,6 @@ export default function ReceivePaymentPage() {
               </div>
             </div>
 
-            {/* Amount input */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Payment Amount</p>
               <div className="flex items-center gap-3 bg-[#F9F6F2] border-2 border-[#8B1E24]/20 rounded-2xl px-4 py-4 focus-within:border-[#8B1E24]">
@@ -173,7 +169,6 @@ export default function ReceivePaymentPage() {
               )}
             </div>
 
-            {/* Suggested amounts */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Suggested</p>
               <div className="flex gap-2">
@@ -189,7 +184,6 @@ export default function ReceivePaymentPage() {
               </div>
             </div>
 
-            {/* Payment method */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Payment Method</p>
               <div className="flex flex-wrap gap-2">
@@ -205,7 +199,6 @@ export default function ReceivePaymentPage() {
               </div>
             </div>
 
-            {/* Notes */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Notes</p>
               <textarea
@@ -217,7 +210,6 @@ export default function ReceivePaymentPage() {
               />
             </div>
 
-            {/* WhatsApp toggle */}
             <button
               onClick={() => setWhatsapp(!whatsapp)}
               className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl border transition-colors ${whatsapp ? "bg-green-50 border-green-200" : "bg-white border-[#EDE0DB]"}`}
@@ -240,7 +232,6 @@ export default function ReceivePaymentPage() {
               </div>
             </button>
 
-            {/* Slide to confirm */}
             <div className="pt-2">
               <p className="text-xs text-center text-[#6B4C4F] mb-3 font-medium">Slide to confirm payment</p>
               <div ref={trackRef} className="relative h-14 rounded-full overflow-hidden" style={{ background: "#EDE0DB" }}>

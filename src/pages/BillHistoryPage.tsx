@@ -2,27 +2,28 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Plus, ChevronDown, ChevronRight, X } from "lucide-react";
-import { useStore, formatCurrency, formatShortDate } from "../data/store";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatShortDate } from "../lib/utils";
 
 export default function BillHistoryPage() {
   const navigate = useNavigate();
-  const { state } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("all");
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
 
-  // All transactions (bills + payments) filtered
   const allTxs = useMemo(() => {
-    return state.transactions
+    return transactions
       .filter((t) => {
         if (customerId !== "all" && t.vendorId !== customerId) return false;
         if (search && !t.vendorName.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [state.transactions, search, customerId]);
+  }, [transactions, search, customerId]);
 
-  // Top-level totals
   const totals = useMemo(() => {
     const bills = allTxs.filter((t) => t.type === "bill");
     const payments = allTxs.filter((t) => t.type === "payment");
@@ -34,7 +35,6 @@ export default function BillHistoryPage() {
     };
   }, [allTxs]);
 
-  // Group by month key "YYYY-MM"
   const monthGroups = useMemo(() => {
     const map: Record<string, typeof allTxs> = {};
     allTxs.forEach((t) => {
@@ -69,7 +69,6 @@ export default function BillHistoryPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pb-24">
-      {/* Header */}
       <div className="px-5 pt-12 pb-4 bg-white sticky top-0 z-10 border-b border-[#EDE0DB]">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-[#1A0A0C]">Bills</h1>
@@ -82,19 +81,17 @@ export default function BillHistoryPage() {
           </motion.button>
         </div>
 
-        {/* Search */}
         <div className="flex items-center gap-2 bg-[#F9F6F2] rounded-xl px-3.5 py-2.5 border border-[#EDE0DB]">
           <Search size={15} className="text-[#6B4C4F] flex-shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by customer…"
+            placeholder="Search by customer..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-[#6B4C4F]/50"
           />
           {search && <button onClick={() => setSearch("")}><X size={14} className="text-[#6B4C4F]" /></button>}
         </div>
 
-        {/* Customer filter chips */}
         <div className="flex gap-2 mt-2.5 overflow-x-auto pb-0.5 no-scrollbar">
           <button
             onClick={() => setCustomerId("all")}
@@ -102,7 +99,7 @@ export default function BillHistoryPage() {
           >
             All
           </button>
-          {state.vendors.map((v) => (
+          {vendors.map((v) => (
             <button
               key={v._id}
               onClick={() => setCustomerId(v._id === customerId ? "all" : v._id)}
@@ -114,7 +111,6 @@ export default function BillHistoryPage() {
         </div>
       </div>
 
-      {/* Total analytics */}
       <div className="px-5 pt-4 pb-2 grid grid-cols-3 gap-2.5">
         <div className="bg-white border border-[#EDE0DB] rounded-xl p-3 shadow-sm">
           <p className="text-[10px] font-semibold text-[#6B4C4F] uppercase tracking-wide mb-1">Bills</p>
@@ -133,7 +129,6 @@ export default function BillHistoryPage() {
         <p className="text-xs text-[#6B4C4F]">{totals.count} transactions total</p>
       </div>
 
-      {/* Month accordions */}
       {monthGroups.length === 0 ? (
         <div className="text-center py-16 px-5">
           <p className="text-sm font-semibold text-[#1A0A0C]">No transactions found</p>
@@ -147,7 +142,6 @@ export default function BillHistoryPage() {
             const isOpen = openMonths.has(group.key);
             return (
               <div key={group.key} className="bg-white border border-[#EDE0DB] rounded-2xl shadow-sm overflow-hidden">
-                {/* Accordion header */}
                 <button
                   onClick={() => toggleMonth(group.key)}
                   className="w-full flex items-center justify-between px-4 py-3.5 text-left"
@@ -169,7 +163,6 @@ export default function BillHistoryPage() {
                   </div>
                 </button>
 
-                {/* Month summary row */}
                 <div className="grid grid-cols-3 border-t border-[#EDE0DB] bg-[#F9F6F2]">
                   <div className="px-3 py-2.5 border-r border-[#EDE0DB]">
                     <p className="text-[10px] text-[#6B4C4F] mb-0.5">Bills</p>
@@ -185,7 +178,6 @@ export default function BillHistoryPage() {
                   </div>
                 </div>
 
-                {/* Expanded transactions */}
                 <AnimatePresence initial={false}>
                   {isOpen && (
                     <motion.div
@@ -196,16 +188,12 @@ export default function BillHistoryPage() {
                       className="overflow-hidden"
                     >
                       {group.txs.map((t, i) => {
-                        const vendor = state.vendors.find((v) => v._id === t.vendorId);
+                        const vendor = vendors.find((v) => v._id === t.vendorId);
                         return (
                           <motion.button
                             key={t._id}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() =>
-                              t.type === "bill"
-                                ? navigate(`/bills/${t._id}`)
-                                : navigate(`/payments/${t._id}`)
-                            }
+                            onClick={() => t.type === "bill" ? navigate(`/bills/${t._id}`) : navigate(`/payments/${t._id}`)}
                             className={`w-full flex items-center gap-3 px-4 py-3 text-left border-t border-[#EDE0DB] ${i % 2 === 0 ? "bg-white" : "bg-[#FDFCFC]"}`}
                           >
                             <div className="flex-1 min-w-0">
@@ -238,7 +226,6 @@ export default function BillHistoryPage() {
         </div>
       )}
 
-      {/* FAB */}
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}

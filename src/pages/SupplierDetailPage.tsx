@@ -4,24 +4,27 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft, Plus, CreditCard, Phone, MessageCircle, Receipt, ChevronRight,
 } from "lucide-react";
-import { useStore, formatCurrency, formatDate, formatShortDate } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatDate, formatShortDate } from "../lib/utils";
 import { toast } from "sonner";
+import type { Id } from "../convex/_generated/dataModel";
 
 type ModalType = "bill" | "payment" | null;
 
 export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { state, dispatch } = useStore();
+  const suppliers = useQuery(api.suppliers.getSuppliers) ?? [];
+  const supplierTxs = useQuery(api.suppliers.getSupplierTransactions, { supplierId: id as Id<"suppliers"> }) ?? [];
+  const createSupplierTransaction = useMutation(api.suppliers.createSupplierTransaction);
   const [modal, setModal] = useState<ModalType>(null);
   const [tab, setTab] = useState<"all" | "purchases" | "payments">("all");
 
-  const supplier = useMemo(() => state.suppliers.find((s) => s._id === id), [state.suppliers, id]);
+  const supplier = useMemo(() => suppliers.find((s) => s._id === id), [suppliers, id]);
   const txs = useMemo(() =>
-    (state.supplierTransactions || [])
-      .filter((t) => t.supplierId === id)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [state.supplierTransactions, id]
+    [...supplierTxs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [supplierTxs]
   );
 
   const filtered = useMemo(() => {
@@ -45,13 +48,11 @@ export default function SupplierDetailPage() {
   return (
     <>
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="pb-36">
-        {/* Header */}
         <div className="bg-gradient-to-b from-[#FFF8F4] to-white px-5 pt-12 pb-5">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm mb-5">
             <ArrowLeft size={18} className="text-[#1A0A0C]" />
           </button>
 
-          {/* Profile */}
           <div className="flex items-center gap-4 mb-4">
             <div className="w-16 h-16 rounded-2xl bg-[#8B1E24]/10 border border-[#8B1E24]/20 flex items-center justify-center font-bold text-[#8B1E24] text-xl">
               {supplier.avatar}
@@ -66,13 +67,11 @@ export default function SupplierDetailPage() {
             </div>
           </div>
 
-          {/* Balance card */}
           <div className={`rounded-2xl px-4 py-4 ${supplier.balanceDue > 0 ? "bg-[#8B1E24]" : "bg-[#16A34A]"}`}>
             <p className="text-xs font-semibold text-white/70 uppercase tracking-wider">You Owe</p>
             <p className="text-3xl font-bold text-white mt-1">{formatCurrency(supplier.balanceDue)}</p>
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div className="bg-white border border-[#EDE0DB] rounded-xl p-3 shadow-sm">
               <p className="text-xs text-[#6B4C4F] font-medium">Total Purchased</p>
@@ -84,7 +83,6 @@ export default function SupplierDetailPage() {
             </div>
           </div>
 
-          {/* Contact shortcuts */}
           <div className="flex gap-2.5 mt-3">
             <a href={`tel:${supplier.phone}`} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-[#EDE0DB] rounded-xl py-2.5 text-xs font-semibold text-[#6B4C4F] shadow-sm">
               <Phone size={13} /> Call
@@ -95,7 +93,6 @@ export default function SupplierDetailPage() {
           </div>
         </div>
 
-        {/* Transaction tabs */}
         <div className="px-5 mt-5">
           <div className="flex gap-2 mb-4">
             {(["all", "purchases", "payments"] as const).map((t) => (
@@ -109,7 +106,6 @@ export default function SupplierDetailPage() {
             ))}
           </div>
 
-          {/* Transaction list */}
           <AnimatePresence mode="popLayout">
             {filtered.length === 0 ? (
               <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
@@ -151,7 +147,6 @@ export default function SupplierDetailPage() {
         </div>
       </motion.div>
 
-      {/* Fixed bottom action bar */}
       <div className="fixed bottom-16 left-0 right-0 px-5 pb-3 pt-2 bg-white/90 backdrop-blur border-t border-[#EDE0DB]">
         <div className="flex gap-2.5">
           <motion.button
@@ -171,25 +166,21 @@ export default function SupplierDetailPage() {
         </div>
       </div>
 
-      {/* Modal */}
       <AnimatePresence>
         {modal && (
           <SupplierModal
             type={modal}
             supplier={supplier}
             onClose={() => setModal(null)}
-            onSave={(amount, notes, paymentMethod) => {
-              dispatch({
-                type: "ADD_SUPPLIER_TRANSACTION",
-                tx: {
-                  type: modal === "bill" ? "purchase" : "payment",
-                  supplierId: supplier._id,
-                  supplierName: supplier.name,
-                  amount,
-                  date: new Date().toISOString(),
-                  notes: notes || undefined,
-                  paymentMethod: modal === "payment" ? paymentMethod : undefined,
-                },
+            onSave={async (amount, notes, paymentMethod) => {
+              await createSupplierTransaction({
+                type: modal === "bill" ? "purchase" : "payment",
+                supplierId: supplier._id,
+                supplierName: supplier.name,
+                amount,
+                date: new Date().toISOString(),
+                notes: notes || undefined,
+                paymentMethod: modal === "payment" ? paymentMethod : undefined,
               });
               toast.success(modal === "bill" ? "Bill recorded" : "Payment recorded");
               setModal(null);
@@ -243,7 +234,6 @@ function SupplierModal({ type, supplier, onClose, onSave }: {
             : `Outstanding: ${formatCurrency(supplier.balanceDue)}`}
         </p>
 
-        {/* Amount */}
         <label className="block text-xs font-semibold text-[#6B4C4F] mb-1.5">Amount (₹)</label>
         <input
           type="number"
@@ -254,7 +244,6 @@ function SupplierModal({ type, supplier, onClose, onSave }: {
           autoFocus
         />
 
-        {/* Suggested amounts for payment */}
         {type === "payment" && supplier.balanceDue > 0 && (
           <div className="flex gap-2 mb-4">
             {[0.25, 0.5, 0.75, 1].map((f) => {
@@ -272,7 +261,6 @@ function SupplierModal({ type, supplier, onClose, onSave }: {
           </div>
         )}
 
-        {/* Payment method */}
         {type === "payment" && (
           <>
             <label className="block text-xs font-semibold text-[#6B4C4F] mb-1.5">Payment Method</label>
@@ -290,11 +278,10 @@ function SupplierModal({ type, supplier, onClose, onSave }: {
           </>
         )}
 
-        {/* Notes */}
         <label className="block text-xs font-semibold text-[#6B4C4F] mb-1.5">Notes (optional)</label>
         <input
           type="text"
-          placeholder="Add a note…"
+          placeholder="Add a note..."
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           className="w-full bg-[#F9F6F2] border border-[#EDE0DB] rounded-xl px-4 py-3 text-sm text-[#1A0A0C] outline-none focus:border-[#8B1E24] mb-5"

@@ -2,21 +2,23 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Plus, Phone, MessageCircle, ChevronRight, SlidersHorizontal, X } from "lucide-react";
-import { useStore, formatCurrency, formatShortDate } from "../data/store";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatShortDate } from "../lib/utils";
 
 type Filter = "all" | "due" | "paid";
 type Sort = "name" | "due" | "recent";
 
 export default function CustomerListPage() {
   const navigate = useNavigate();
-  const { state } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("due");
   const [showSort, setShowSort] = useState(false);
 
   const filtered = useMemo(() => {
-    let list = [...state.vendors];
+    let list = [...vendors];
     if (search) list = list.filter((v) => v.name.toLowerCase().includes(search.toLowerCase()) || v.phone.includes(search));
     if (filter === "due") list = list.filter((v) => v.dueAmount > 0);
     if (filter === "paid") list = list.filter((v) => v.dueAmount === 0);
@@ -24,20 +26,19 @@ export default function CustomerListPage() {
     else if (sort === "due") list.sort((a, b) => b.dueAmount - a.dueAmount);
     else if (sort === "recent") list.sort((a, b) => new Date(b.lastTransaction).getTime() - new Date(a.lastTransaction).getTime());
     return list;
-  }, [state.vendors, search, filter, sort]);
+  }, [vendors, search, filter, sort]);
 
-  const totalDue = useMemo(() => state.vendors.reduce((s, v) => s + v.dueAmount, 0), [state.vendors]);
+  const totalDue = useMemo(() => vendors.reduce((s, v) => s + v.dueAmount, 0), [vendors]);
 
   const sortLabels: Record<Sort, string> = { name: "Name", due: "Due Amount", recent: "Last Active" };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pb-6 relative">
-      {/* Header */}
       <div className="px-5 pt-12 pb-4 bg-white sticky top-0 z-10 border-b border-[#EDE0DB]">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-xl font-bold text-[#1A0A0C]">Customers</h1>
-            <p className="text-xs text-[#6B4C4F] mt-0.5">{state.vendors.length} customers · {formatCurrency(totalDue)} total due</p>
+            <p className="text-xs text-[#6B4C4F] mt-0.5">{vendors.length} customers · {formatCurrency(totalDue)} total due</p>
           </div>
           <motion.button
             whileTap={{ scale: 0.92 }}
@@ -48,7 +49,6 @@ export default function CustomerListPage() {
           </motion.button>
         </div>
 
-        {/* Search */}
         <div className="flex items-center gap-2 bg-[#F9F6F2] rounded-xl px-3.5 py-2.5 border border-[#EDE0DB]">
           <Search size={16} className="text-[#6B4C4F] flex-shrink-0" />
           <input
@@ -64,7 +64,6 @@ export default function CustomerListPage() {
           )}
         </div>
 
-        {/* Filter chips + sort */}
         <div className="flex items-center gap-2 mt-3">
           {(["all", "due", "paid"] as Filter[]).map((f) => (
             <button
@@ -85,7 +84,6 @@ export default function CustomerListPage() {
           </button>
         </div>
 
-        {/* Sort dropdown */}
         <AnimatePresence>
           {showSort && (
             <motion.div
@@ -108,7 +106,6 @@ export default function CustomerListPage() {
         </AnimatePresence>
       </div>
 
-      {/* List */}
       <div className="px-5 pt-4 space-y-2.5">
         <AnimatePresence mode="popLayout">
           {filtered.length === 0 ? (
@@ -134,7 +131,6 @@ export default function CustomerListPage() {
                     onClick={() => navigate(`/customers/${v._id}`)}
                     className="w-full flex items-center gap-3.5 px-4 pt-4 pb-3"
                   >
-                    {/* Avatar */}
                     <div className="relative flex-shrink-0">
                       <div className="w-12 h-12 rounded-xl bg-[#FFF8F4] border border-[#EDE0DB] flex items-center justify-center font-bold text-[#8B1E24] text-sm">
                         {v.avatar}
@@ -143,13 +139,11 @@ export default function CustomerListPage() {
                         <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white" />
                       )}
                     </div>
-                    {/* Info */}
                     <div className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-bold text-[#1A0A0C] truncate">{v.name}</p>
                       <p className="text-xs text-[#6B4C4F] mt-0.5">{v.phone}</p>
                       <p className="text-xs text-[#6B4C4F] mt-0.5">{formatShortDate(v.lastTransaction)}</p>
                     </div>
-                    {/* Due amount */}
                     <div className="text-right flex-shrink-0">
                       {v.dueAmount > 0 ? (
                         <>
@@ -164,23 +158,12 @@ export default function CustomerListPage() {
                     </div>
                     <ChevronRight size={16} className="text-[#EDE0DB] flex-shrink-0 ml-1" />
                   </button>
-                  {/* Quick actions */}
                   <div className="border-t border-[#EDE0DB] flex">
-                    <a
-                      href={`tel:${v.phone}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-[#6B4C4F] hover:bg-[#FFF8F4] transition-colors"
-                    >
+                    <a href={`tel:${v.phone}`} onClick={(e) => e.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-[#6B4C4F] hover:bg-[#FFF8F4] transition-colors">
                       <Phone size={13} /> Call
                     </a>
                     <div className="w-px bg-[#EDE0DB]" />
-                    <a
-                      href={`https://wa.me/91${v.phone}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-[#16A34A] hover:bg-green-50 transition-colors"
-                    >
+                    <a href={`https://wa.me/91${v.phone}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-[#16A34A] hover:bg-green-50 transition-colors">
                       <MessageCircle size={13} /> WhatsApp
                     </a>
                   </div>
@@ -191,7 +174,6 @@ export default function CustomerListPage() {
         </AnimatePresence>
       </div>
 
-      {/* FAB */}
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}

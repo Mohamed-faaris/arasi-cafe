@@ -3,15 +3,15 @@ import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  BarChart, Bar, PieChart, Pie, Cell,
 } from "recharts";
 import {
   Plus, CreditCard, UserPlus, Package, Truck,
   TrendingUp, Users, Receipt, Wallet, ChevronRight, ArrowUpRight,
 } from "lucide-react";
-import { useStore, formatCurrency, formatShortDate, isToday } from "../data/store";
-
-// ── small reusable pieces ──────────────────────────────────
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatShortDate, isToday } from "../lib/utils";
 
 function StatCard({ label, value, sub, icon: Icon, accent }: {
   label: string; value: string; sub?: string; icon: React.ElementType; accent?: boolean;
@@ -61,24 +61,23 @@ type Period = "daily" | "weekly" | "monthly";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { state } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const [period, setPeriod] = useState<Period>("weekly");
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 
-  // ── computed stats ─────────────────────────────────────
   const stats = useMemo(() => {
-    const todayBills = state.transactions.filter((t) => t.type === "bill" && isToday(t.date));
+    const todayBills = transactions.filter((t) => t.type === "bill" && isToday(t.date));
     const todaySales = todayBills.reduce((s, t) => s + t.amount, 0);
-    const totalDue = state.vendors.reduce((s, v) => s + v.dueAmount, 0);
-    const totalBills = state.transactions.filter((t) => t.type === "bill").length;
-    const totalPayments = state.transactions.filter((t) => t.type === "payment").reduce((s, t) => s + t.amount, 0);
+    const totalDue = vendors.reduce((s, v) => s + v.dueAmount, 0);
+    const totalBills = transactions.filter((t) => t.type === "bill").length;
+    const totalPayments = transactions.filter((t) => t.type === "payment").reduce((s, t) => s + t.amount, 0);
     return { todaySales, totalDue, totalBills, totalPayments };
-  }, [state]);
+  }, [vendors, transactions]);
 
-  // ── chart data: last 7 days revenue ───────────────────
   const chartData = useMemo(() => {
     const days: { date: string; label: string; revenue: number; outstanding: number }[] = [];
     for (let i = 6; i >= 0; i--) {
@@ -86,19 +85,18 @@ export default function DashboardPage() {
       d.setDate(d.getDate() - i);
       const dateStr = d.toDateString();
       const label = i === 0 ? "Today" : d.toLocaleDateString("en-IN", { weekday: "short" });
-      const revenue = state.transactions
+      const revenue = transactions
         .filter((t) => t.type === "bill" && new Date(t.date).toDateString() === dateStr)
         .reduce((s, t) => s + t.amount, 0);
-      const outstanding = state.vendors.reduce((s, v) => s + v.dueAmount, 0);
+      const outstanding = vendors.reduce((s, v) => s + v.dueAmount, 0);
       days.push({ date: dateStr, label, revenue, outstanding });
     }
     return days;
-  }, [state]);
+  }, [vendors, transactions]);
 
-  // ── top products by frequency ──────────────────────────
   const topProducts = useMemo(() => {
     const freq: Record<string, { name: string; count: number; revenue: number }> = {};
-    state.transactions.filter((t) => t.type === "bill").forEach((t) => {
+    transactions.filter((t) => t.type === "bill").forEach((t) => {
       (t.items || []).forEach((item) => {
         if (!freq[item.name]) freq[item.name] = { name: item.name, count: 0, revenue: 0 };
         freq[item.name].count += item.qty;
@@ -106,21 +104,18 @@ export default function DashboardPage() {
       });
     });
     return Object.values(freq).sort((a, b) => b.revenue - a.revenue).slice(0, 4);
-  }, [state]);
+  }, [transactions]);
 
-  // ── recent activity ────────────────────────────────────
   const recentActivity = useMemo(() =>
-    [...state.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5),
-    [state.transactions]
+    [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5),
+    [transactions]
   );
 
-  // ── top due vendors ────────────────────────────────────
   const topDue = useMemo(() =>
-    [...state.vendors].filter((v) => v.dueAmount > 0).sort((a, b) => b.dueAmount - a.dueAmount).slice(0, 3),
-    [state.vendors]
+    [...vendors].filter((v) => v.dueAmount > 0).sort((a, b) => b.dueAmount - a.dueAmount).slice(0, 3),
+    [vendors]
   );
 
-  // ── revenue vs collections chart (period-aware) ───────
   const revenueChartData = useMemo(() => {
     const n = period === "daily" ? 7 : period === "weekly" ? 8 : 6;
     const points: { label: string; revenue: number; payments: number }[] = [];
@@ -146,21 +141,20 @@ export default function DashboardPage() {
         start = new Date(d.getFullYear(), d.getMonth(), 1);
         end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
       }
-      const revenue = state.transactions
+      const revenue = transactions
         .filter((t) => { const dt = new Date(t.date); return t.type === "bill" && dt >= start && dt <= end; })
         .reduce((s, t) => s + t.amount, 0);
-      const payments = state.transactions
+      const payments = transactions
         .filter((t) => { const dt = new Date(t.date); return t.type === "payment" && dt >= start && dt <= end; })
         .reduce((s, t) => s + t.amount, 0);
       points.push({ label, revenue, payments });
     }
     return points;
-  }, [state.transactions, period]);
+  }, [transactions, period]);
 
-  // ── collection rate ────────────────────────────────────
   const { collectionRate, totalCollected, totalDue, collectionPie } = useMemo(() => {
-    const totalRevenue = state.transactions.filter((t) => t.type === "bill").reduce((s, t) => s + t.amount, 0);
-    const totalDue = state.vendors.reduce((s, v) => s + v.dueAmount, 0);
+    const totalRevenue = transactions.filter((t) => t.type === "bill").reduce((s, t) => s + t.amount, 0);
+    const totalDue = vendors.reduce((s, v) => s + v.dueAmount, 0);
     const totalCollected = Math.max(0, totalRevenue - totalDue);
     const rate = totalRevenue > 0 ? (totalCollected / totalRevenue) * 100 : 0;
     return {
@@ -172,7 +166,7 @@ export default function DashboardPage() {
         { name: "Due", value: totalDue, color: "#8B1E24" },
       ],
     };
-  }, [state]);
+  }, [vendors, transactions]);
 
   const stagger = { container: { animate: { transition: { staggerChildren: 0.07 } } }, item: { initial: { y: 16, opacity: 0 }, animate: { y: 0, opacity: 1, transition: { duration: 0.35, ease: "easeOut" } } } };
 
@@ -184,22 +178,15 @@ export default function DashboardPage() {
       transition={{ duration: 0.2 }}
       className="pb-6"
     >
-      {/* Header */}
       <div className="px-5 pt-12 pb-6 bg-gradient-to-b from-[#FFF8F4] to-white">
         <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.4 }}>
           <p className="text-sm font-semibold text-[#C99A4B] uppercase tracking-wider">{greeting}</p>
-          <h1 className="text-2xl font-bold text-[#1A0A0C] mt-0.5">Arasi Cafe ☕</h1>
+          <h1 className="text-2xl font-bold text-[#1A0A0C] mt-0.5">Arasi Cafe</h1>
           <p className="text-sm text-[#6B4C4F] mt-0.5">{today}</p>
         </motion.div>
       </div>
 
-      {/* Stats grid */}
-      <motion.div
-        variants={stagger.container}
-        initial="initial"
-        animate="animate"
-        className="px-5 grid grid-cols-2 gap-3"
-      >
+      <motion.div variants={stagger.container} initial="initial" animate="animate" className="px-5 grid grid-cols-2 gap-3">
         <motion.div variants={stagger.item}>
           <StatCard label="Today's Sales" value={formatCurrency(stats.todaySales)} icon={TrendingUp} accent />
         </motion.div>
@@ -207,14 +194,13 @@ export default function DashboardPage() {
           <StatCard label="Total Due" value={formatCurrency(stats.totalDue)} sub="Outstanding" icon={Wallet} />
         </motion.div>
         <motion.div variants={stagger.item}>
-          <StatCard label="Customers" value={String(state.vendors.length)} sub="Total active" icon={Users} />
+          <StatCard label="Customers" value={String(vendors.length)} sub="Total active" icon={Users} />
         </motion.div>
         <motion.div variants={stagger.item}>
           <StatCard label="Total Bills" value={String(stats.totalBills)} sub="All time" icon={Receipt} />
         </motion.div>
       </motion.div>
 
-      {/* Revenue Chart */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -252,7 +238,6 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* Quick Actions */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -273,7 +258,6 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* Top Outstanding */}
       {topDue.length > 0 && (
         <motion.div
           initial={{ y: 20, opacity: 0 }}
@@ -315,7 +299,6 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Best Selling Products */}
       {topProducts.length > 0 && (
         <motion.div
           initial={{ y: 20, opacity: 0 }}
@@ -346,7 +329,6 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Revenue vs Collections chart */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -371,12 +353,10 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        {/* Legend */}
         <div className="flex gap-4 px-4 pb-3">
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#8B1E24]" /><span className="text-xs text-[#6B4C4F]">Revenue</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#C99A4B]" /><span className="text-xs text-[#6B4C4F]">Collected</span></div>
         </div>
-        {/* Period selector */}
         <div className="flex gap-2 px-4 pb-4">
           {(["daily", "weekly", "monthly"] as Period[]).map((p) => (
             <button
@@ -390,7 +370,6 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* Collection Rate */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -412,7 +391,6 @@ export default function DashboardPage() {
         </PieChart>
       </motion.div>
 
-      {/* Recent Activity */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}

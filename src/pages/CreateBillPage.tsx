@@ -2,11 +2,14 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, Search, Plus, Minus, X, ChevronDown, Receipt, Camera } from "lucide-react";
-import { useStore, formatCurrency, Product } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency } from "../lib/utils";
 import { toast } from "sonner";
+import type { Doc, Id } from "../convex/_generated/dataModel";
 
 type BillItem = {
-  productId: string;
+  productId: Id<"products">;
   name: string;
   qty: number;
   price: number;
@@ -24,7 +27,9 @@ function calcLineTotal(item: BillItem): number {
 export default function CreateBillPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { state, dispatch } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const products = useQuery(api.products.getProducts) ?? [];
+  const createTransaction = useMutation(api.transactions.createTransaction);
 
   const preselectedId = searchParams.get("customerId") || "";
   const [customerId, setCustomerId] = useState(preselectedId);
@@ -35,16 +40,16 @@ export default function CreateBillPage() {
   const [items, setItems] = useState<BillItem[]>([]);
   const [notes, setNotes] = useState("");
 
-  const selectedVendor = useMemo(() => state.vendors.find((v) => v._id === customerId), [state.vendors, customerId]);
+  const selectedVendor = useMemo(() => vendors.find((v) => v._id === customerId), [vendors, customerId]);
 
   const filteredCustomers = useMemo(() =>
-    state.vendors.filter((v) => v.name.toLowerCase().includes(customerSearch.toLowerCase()) || v.phone.includes(customerSearch)),
-    [state.vendors, customerSearch]
+    vendors.filter((v) => v.name.toLowerCase().includes(customerSearch.toLowerCase()) || v.phone.includes(customerSearch)),
+    [vendors, customerSearch]
   );
 
   const filteredProducts = useMemo(() =>
-    state.products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase())),
-    [state.products, productSearch]
+    products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase())),
+    [products, productSearch]
   );
 
   const grandTotal = useMemo(() => items.reduce((s, item) => s + calcLineTotal(item), 0), [items]);
@@ -54,7 +59,7 @@ export default function CreateBillPage() {
   }, 0), [items]);
   const subtotal = grandTotal - totalTax;
 
-  const addProduct = (p: Product) => {
+  const addProduct = (p: Doc<"products">) => {
     const existing = items.findIndex((i) => i.productId === p._id);
     if (existing >= 0) {
       setItems((prev) => prev.map((item, idx) => idx === existing ? { ...item, qty: item.qty + 1 } : item));
@@ -91,33 +96,30 @@ export default function CreateBillPage() {
     setItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSave = (withWhatsApp = false) => {
+  const handleSave = async (withWhatsApp = false) => {
     if (!customerId) { toast.error("Please select a customer"); return; }
     if (items.length === 0) { toast.error("Add at least one product"); return; }
 
     const profit = items.reduce((s, item) => s + (item.price - item.cost) * item.qty, 0);
-    dispatch({
-      type: "ADD_TRANSACTION",
-      transaction: {
-        type: "bill",
-        vendorId: customerId,
-        vendorName: selectedVendor!.name,
-        amount: Math.round(grandTotal),
-        profit: Math.round(profit),
-        date: new Date().toISOString(),
-        notes: notes.trim() || undefined,
-        items: items.map((item) => ({
-          productId: item.productId,
-          name: item.name,
-          qty: item.qty,
-          price: item.price,
-          cost: item.cost,
-          uom: item.uom,
-          cgst: item.cgst,
-          sgst: item.sgst,
-          profit: (item.price - item.cost) * item.qty,
-        })),
-      },
+    await createTransaction({
+      type: "bill",
+      vendorId: customerId as Id<"vendors">,
+      vendorName: selectedVendor!.name,
+      amount: Math.round(grandTotal),
+      profit: Math.round(profit),
+      date: new Date().toISOString(),
+      notes: notes.trim() || undefined,
+      items: items.map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        qty: item.qty,
+        price: item.price,
+        cost: item.cost,
+        uom: item.uom,
+        cgst: item.cgst,
+        sgst: item.sgst,
+        profit: (item.price - item.cost) * item.qty,
+      })),
     });
     toast.success("Bill created!");
 
@@ -131,7 +133,6 @@ export default function CreateBillPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pb-48">
-      {/* Header */}
       <div className="px-5 pt-12 pb-4 bg-white sticky top-0 z-10 border-b border-[#EDE0DB]">
         <div className="flex items-center gap-3 mb-1">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
@@ -145,7 +146,6 @@ export default function CreateBillPage() {
       </div>
 
       <div className="px-5 pt-4 space-y-4">
-        {/* Customer selector */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Customer *</p>
           {selectedVendor ? (
@@ -199,7 +199,6 @@ export default function CreateBillPage() {
           )}
         </div>
 
-        {/* Add products */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F]">Items *</p>
@@ -212,7 +211,6 @@ export default function CreateBillPage() {
             </motion.button>
           </div>
 
-          {/* Product search dropdown */}
           <AnimatePresence>
             {showProducts && (
               <motion.div
@@ -256,7 +254,6 @@ export default function CreateBillPage() {
             )}
           </AnimatePresence>
 
-          {/* Bill items */}
           <div className="space-y-2.5">
             {items.length === 0 ? (
               <div className="text-center py-8 bg-[#F9F6F2] rounded-xl border border-dashed border-[#EDE0DB]">
@@ -282,7 +279,6 @@ export default function CreateBillPage() {
                     </button>
                   </div>
                   <div className="flex items-center gap-3">
-                    {/* Qty stepper */}
                     <div className="flex items-center gap-2 bg-[#F9F6F2] rounded-lg p-1">
                       <button onClick={() => updateQty(idx, -0.5)} className="w-7 h-7 rounded-md bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
                         <Minus size={12} className="text-[#1A0A0C]" />
@@ -292,7 +288,6 @@ export default function CreateBillPage() {
                         <Plus size={12} className="text-white" />
                       </button>
                     </div>
-                    {/* Price edit */}
                     <div className="flex items-center gap-1.5 bg-[#F9F6F2] border border-[#EDE0DB] rounded-lg px-2.5 py-1.5 flex-1">
                       <span className="text-sm text-[#6B4C4F]">₹</span>
                       <input
@@ -302,7 +297,6 @@ export default function CreateBillPage() {
                         className="w-full bg-transparent text-sm font-bold text-[#1A0A0C] outline-none"
                       />
                     </div>
-                    {/* Line total */}
                     <div className="text-right">
                       <p className="text-sm font-bold text-[#8B1E24]">{formatCurrency(calcLineTotal(item))}</p>
                     </div>
@@ -313,7 +307,6 @@ export default function CreateBillPage() {
           </div>
         </div>
 
-        {/* Notes */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Notes</p>
           <textarea
@@ -325,7 +318,6 @@ export default function CreateBillPage() {
           />
         </div>
 
-        {/* Attach image */}
         <button className="w-full flex items-center gap-3 bg-[#F9F6F2] border border-dashed border-[#EDE0DB] rounded-xl px-4 py-3 hover:border-[#8B1E24] transition-colors">
           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center border border-[#EDE0DB]">
             <Camera size={16} className="text-[#6B4C4F]" />
@@ -334,7 +326,6 @@ export default function CreateBillPage() {
         </button>
       </div>
 
-      {/* Sticky footer */}
       {items.length > 0 && (
         <motion.div
           initial={{ y: 100 }}
@@ -342,7 +333,6 @@ export default function CreateBillPage() {
           className="fixed bottom-0 left-0 right-0 flex justify-center"
         >
           <div className="w-full max-w-[430px] bg-white border-t border-[#EDE0DB] px-5 py-4 shadow-2xl">
-            {/* Totals */}
             <div className="flex justify-between items-center mb-1">
               <p className="text-xs text-[#6B4C4F]">Subtotal</p>
               <p className="text-xs text-[#6B4C4F] font-medium">{formatCurrency(subtotal)}</p>
@@ -357,7 +347,6 @@ export default function CreateBillPage() {
               <p className="text-base font-bold text-[#1A0A0C]">Grand Total</p>
               <p className="text-lg font-bold text-[#8B1E24]">{formatCurrency(grandTotal)}</p>
             </div>
-            {/* Buttons */}
             <div className="flex gap-2.5">
               <motion.button
                 whileTap={{ scale: 0.97 }}

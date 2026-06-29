@@ -2,7 +2,9 @@ import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft, User, Phone, MapPin, IndianRupee, Hash } from "lucide-react";
-import { useStore } from "../data/store";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { getInitials } from "../lib/utils";
 import { toast } from "sonner";
 
 function Field({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
@@ -20,9 +22,11 @@ function Field({ label, icon: Icon, children }: { label: string; icon: React.Ele
 export default function AddCustomerPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
-  const { state, dispatch } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const createVendor = useMutation(api.vendors.createVendor);
+  const updateVendor = useMutation(api.vendors.updateVendor);
   const isEdit = Boolean(id);
-  const existing = useMemo(() => id ? state.vendors.find((v) => v._id === id) : null, [state.vendors, id]);
+  const existing = useMemo(() => id ? vendors.find((v) => v._id === id) : null, [vendors, id]);
 
   const [form, setForm] = useState({
     name: existing?.name || "",
@@ -44,35 +48,30 @@ export default function AddCustomerPage() {
     return errs;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     const balance = parseFloat(form.openingBalance) || 0;
     if (isEdit && existing) {
-      dispatch({
-        type: "UPDATE_VENDOR",
-        vendor: {
-          ...existing,
-          name: form.name.trim(),
-          phone: form.phone.replace(/\s/g, ""),
-          address: form.address.trim() || undefined,
-          gstin: form.gstin.trim() || undefined,
-        },
+      await updateVendor({
+        id: existing._id,
+        name: form.name.trim(),
+        phone: form.phone.replace(/\s/g, ""),
+        address: form.address.trim() || undefined,
+        gstin: form.gstin.trim() || undefined,
       });
       toast.success("Customer updated!");
       navigate(`/customers/${existing._id}`);
     } else {
-      dispatch({
-        type: "ADD_VENDOR",
-        vendor: {
-          name: form.name.trim(),
-          phone: form.phone.replace(/\s/g, ""),
-          address: form.address.trim() || undefined,
-          gstin: form.gstin.trim() || undefined,
-          dueAmount: balance,
-          openingBalance: balance,
-        },
+      await createVendor({
+        name: form.name.trim(),
+        phone: form.phone.replace(/\s/g, ""),
+        avatar: getInitials(form.name.trim()),
+        address: form.address.trim() || undefined,
+        gstin: form.gstin.trim() || undefined,
+        dueAmount: balance,
+        openingBalance: balance,
       });
       toast.success("Customer added!");
       navigate("/customers");
@@ -84,7 +83,6 @@ export default function AddCustomerPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="pb-10">
-      {/* Header */}
       <div className="px-5 pt-12 pb-5 bg-gradient-to-b from-[#FFF8F4] to-white border-b border-[#EDE0DB]">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
@@ -97,9 +95,7 @@ export default function AddCustomerPage() {
         </div>
       </div>
 
-      {/* Form */}
       <div className="px-5 mt-6 space-y-5">
-        {/* Avatar placeholder */}
         <div className="flex justify-center">
           <div className="w-20 h-20 rounded-2xl bg-[#FFF8F4] border-2 border-dashed border-[#EDE0DB] flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-[#8B1E24] transition-colors">
             <User size={24} className="text-[#6B4C4F]" />
@@ -131,7 +127,6 @@ export default function AddCustomerPage() {
         </Field>
       </div>
 
-      {/* Save */}
       <div className="px-5 mt-8 space-y-3">
         <motion.button
           whileTap={{ scale: 0.97 }}

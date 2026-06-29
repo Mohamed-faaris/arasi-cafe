@@ -2,18 +2,21 @@ import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
 import { Search, CreditCard, ChevronRight, X, Filter, ArrowLeft } from "lucide-react";
-import { useStore, formatCurrency, formatShortDate } from "../data/store";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency, formatShortDate } from "../lib/utils";
 
 export default function PaymentHistoryPage() {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
-  const { state } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState(id || "all");
   const [showFilter, setShowFilter] = useState(false);
 
   const payments = useMemo(() => {
-    return state.transactions
+    return transactions
       .filter((t) => t.type === "payment")
       .filter((t) => {
         if (customerId !== "all" && t.vendorId !== customerId) return false;
@@ -21,14 +24,13 @@ export default function PaymentHistoryPage() {
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [state.transactions, search, customerId]);
+  }, [transactions, search, customerId]);
 
   const totalPaid = useMemo(() => payments.reduce((s, t) => s + t.amount, 0), [payments]);
   const isDetail = Boolean(id);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pb-6">
-      {/* Header */}
       <div className="px-5 pt-12 pb-4 bg-white sticky top-0 z-10 border-b border-[#EDE0DB]">
         <div className="flex items-center gap-3 mb-4">
           {isDetail && (
@@ -42,7 +44,6 @@ export default function PaymentHistoryPage() {
           </div>
         </div>
 
-        {/* Search + filter */}
         <div className="flex gap-2">
           <div className="flex-1 flex items-center gap-2 bg-[#F9F6F2] rounded-xl px-3.5 py-2.5 border border-[#EDE0DB]">
             <Search size={15} className="text-[#6B4C4F]" />
@@ -72,7 +73,7 @@ export default function PaymentHistoryPage() {
             >
               All
             </button>
-            {state.vendors.map((v) => (
+            {vendors.map((v) => (
               <button
                 key={v._id}
                 onClick={() => setCustomerId(v._id)}
@@ -85,7 +86,6 @@ export default function PaymentHistoryPage() {
         )}
       </div>
 
-      {/* Payment list */}
       <div className="px-5 pt-4 space-y-2.5">
         {payments.length === 0 ? (
           <div className="text-center py-16">

@@ -5,7 +5,9 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
 import { TrendingUp, Wallet, Receipt, Users, BarChart3 } from "lucide-react";
-import { useStore, formatCurrency } from "../data/store";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { formatCurrency } from "../lib/utils";
 
 type Period = "daily" | "weekly" | "monthly";
 
@@ -26,22 +28,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function AnalyticsPage() {
-  const { state } = useStore();
+  const vendors = useQuery(api.vendors.getVendors) ?? [];
+  const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const [period, setPeriod] = useState<Period>("weekly");
 
-  // ── KPIs ────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    const bills = state.transactions.filter((t) => t.type === "bill");
-    const payments = state.transactions.filter((t) => t.type === "payment");
+    const bills = transactions.filter((t) => t.type === "bill");
+    const payments = transactions.filter((t) => t.type === "payment");
     const totalRevenue = bills.reduce((s, t) => s + t.amount, 0);
     const totalProfit = bills.reduce((s, t) => s + t.profit, 0);
     const avgBill = bills.length > 0 ? totalRevenue / bills.length : 0;
-    const totalDue = state.vendors.reduce((s, v) => s + v.dueAmount, 0);
+    const totalDue = vendors.reduce((s, v) => s + v.dueAmount, 0);
     const collectionRate = totalRevenue > 0 ? ((totalRevenue - totalDue) / totalRevenue) * 100 : 0;
     return { totalRevenue, totalProfit, avgBill, totalDue, billCount: bills.length, collectionRate };
-  }, [state]);
+  }, [vendors, transactions]);
 
-  // ── Chart data ──────────────────────────────────────────
   const chartData = useMemo(() => {
     const n = period === "daily" ? 7 : period === "weekly" ? 8 : 6;
     const points: { label: string; revenue: number; payments: number }[] = [];
@@ -70,21 +71,20 @@ export default function AnalyticsPage() {
         end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
       }
 
-      const revenue = state.transactions
+      const revenue = transactions
         .filter((t) => { const dt = new Date(t.date); return t.type === "bill" && dt >= start && dt <= end; })
         .reduce((s, t) => s + t.amount, 0);
-      const pmts = state.transactions
+      const pmts = transactions
         .filter((t) => { const dt = new Date(t.date); return t.type === "payment" && dt >= start && dt <= end; })
         .reduce((s, t) => s + t.amount, 0);
       points.push({ label, revenue, payments: pmts });
     }
     return points;
-  }, [state.transactions, period]);
+  }, [transactions, period]);
 
-  // ── Top products ─────────────────────────────────────────
   const topProducts = useMemo(() => {
     const freq: Record<string, { name: string; count: number; revenue: number }> = {};
-    state.transactions.filter((t) => t.type === "bill").forEach((t) => {
+    transactions.filter((t) => t.type === "bill").forEach((t) => {
       (t.items || []).forEach((item) => {
         if (!freq[item.name]) freq[item.name] = { name: item.name, count: 0, revenue: 0 };
         freq[item.name].count += item.qty;
@@ -92,20 +92,18 @@ export default function AnalyticsPage() {
       });
     });
     return Object.values(freq).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-  }, [state]);
+  }, [transactions]);
 
-  // ── Top customers ─────────────────────────────────────────
   const topCustomers = useMemo(() => {
     const map: Record<string, { name: string; bills: number; revenue: number }> = {};
-    state.transactions.filter((t) => t.type === "bill").forEach((t) => {
+    transactions.filter((t) => t.type === "bill").forEach((t) => {
       if (!map[t.vendorId]) map[t.vendorId] = { name: t.vendorName, bills: 0, revenue: 0 };
       map[t.vendorId].bills++;
       map[t.vendorId].revenue += t.amount;
     });
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-  }, [state]);
+  }, [transactions]);
 
-  // ── Outstanding pie ───────────────────────────────────────
   const pieData = useMemo(() => {
     const totalRevenue = kpis.totalRevenue;
     const collected = totalRevenue - kpis.totalDue;
@@ -119,20 +117,12 @@ export default function AnalyticsPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pb-6">
-      {/* Header */}
       <div className="px-5 pt-12 pb-5 bg-gradient-to-b from-[#FFF8F4] to-white border-b border-[#EDE0DB]">
         <h1 className="text-xl font-bold text-[#1A0A0C]">Analytics</h1>
         <p className="text-xs text-[#6B4C4F] mt-0.5">Business performance overview</p>
-
       </div>
 
-      {/* KPI cards */}
-      <motion.div
-        variants={stagger.container}
-        initial="initial"
-        animate="animate"
-        className="px-5 mt-5 grid grid-cols-2 gap-3"
-      >
+      <motion.div variants={stagger.container} initial="initial" animate="animate" className="px-5 mt-5 grid grid-cols-2 gap-3">
         {[
           { label: "Total Revenue", value: formatCurrency(kpis.totalRevenue), icon: TrendingUp, accent: true },
           { label: "Total Profit", value: formatCurrency(kpis.totalProfit), icon: BarChart3 },
@@ -151,7 +141,6 @@ export default function AnalyticsPage() {
         ))}
       </motion.div>
 
-      {/* Revenue chart */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -176,12 +165,10 @@ export default function AnalyticsPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        {/* Legend */}
         <div className="flex gap-4 px-4 pb-3">
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#8B1E24]" /><span className="text-xs text-[#6B4C4F]">Revenue</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#C99A4B]" /><span className="text-xs text-[#6B4C4F]">Collected</span></div>
         </div>
-        {/* Period selector */}
         <div className="flex gap-2 px-4 pb-4">
           {(["daily", "weekly", "monthly"] as Period[]).map((p) => (
             <button
@@ -195,7 +182,6 @@ export default function AnalyticsPage() {
         </div>
       </motion.div>
 
-      {/* Collection rate + pie */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -227,7 +213,6 @@ export default function AnalyticsPage() {
         </div>
       </motion.div>
 
-      {/* Top Products */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -236,7 +221,6 @@ export default function AnalyticsPage() {
       >
         <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-3">Top Products</p>
         <div className="bg-white border border-[#EDE0DB] rounded-2xl shadow-sm overflow-hidden">
-          {/* Table header */}
           <div className="flex items-center px-4 py-2.5 bg-[#F9F6F2] border-b border-[#EDE0DB]">
             <p className="flex-1 text-xs font-bold text-[#6B4C4F] uppercase tracking-wide">#  Product</p>
             <p className="w-16 text-xs font-bold text-[#6B4C4F] text-right">Units</p>
@@ -259,7 +243,6 @@ export default function AnalyticsPage() {
         </div>
       </motion.div>
 
-      {/* Top Customers */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
