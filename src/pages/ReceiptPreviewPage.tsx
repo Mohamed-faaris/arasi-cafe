@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useCallback, useRef } from "react";
+import { useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import html2pdf from "html2pdf.js";
-import { Share } from "@capacitor/share";
+import { Share as CapShare } from "@capacitor/share";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import "./receipt.css";
 
@@ -60,25 +60,18 @@ export default function ReceiptPreviewPage() {
 
   const downloadPDF = useCallback(() => {
     const el = invoiceRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const pageHeight = Math.max(297, (rect.height / rect.width) * 210);
+    if (!el || !tx) return;
     html2pdf()
       .set({
         margin: 0,
-        filename: `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`,
+        filename: `bill-${tx._id?.slice(-6) || "invoice"}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { scale: 3, useCORS: true, logging: false },
-        jsPDF: { unit: "mm", format: [300, pageHeight], orientation: "portrait" },
+        jsPDF: { unit: "mm", format: [210, 297], orientation: "portrait" },
       })
       .from(el)
-      .save()
-      .then(() => {
-        if (vendor?.phone) {
-          window.open(`https://wa.me/91${vendor.phone}`, "_blank");
-        }
-      });
-  }, [tx, vendor]);
+      .save();
+  }, [tx]);
 
   const handleShare = useCallback(async () => {
     const el = invoiceRef.current;
