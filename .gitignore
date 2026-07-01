@@ -11,3 +11,5 @@ dist/
 .DS_Store
 .vercel
 *.tsbuildinfo
+android/app/release.keystore
+android/keystore.properties
