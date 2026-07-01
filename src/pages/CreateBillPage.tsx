@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Search, Plus, Minus, X, ChevronDown, Receipt, Camera } from "lucide-react";
+import { ArrowLeft, Search, Plus, X, ChevronDown, Receipt, Camera } from "lucide-react";
+import QuantityCounter from "../app/components/QuantityCounter";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { formatCurrency } from "../lib/utils";
@@ -80,11 +81,7 @@ export default function CreateBillPage() {
   };
 
   const updateQty = (idx: number, delta: number) => {
-    setItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const newQty = Math.max(0.5, item.qty + delta);
-      return { ...item, qty: newQty };
-    }));
+    setItems((prev) => prev.map((item, i) => i === idx ? { ...item, qty: Math.max(0, item.qty + delta) } : item));
   };
 
   const updatePrice = (idx: number, val: string) => {
@@ -279,15 +276,17 @@ export default function CreateBillPage() {
                     </button>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-[#F9F6F2] rounded-lg p-1">
-                      <button onClick={() => updateQty(idx, -0.5)} className="w-7 h-7 rounded-md bg-white border border-[#EDE0DB] flex items-center justify-center shadow-sm">
-                        <Minus size={12} className="text-[#1A0A0C]" />
-                      </button>
-                      <span className="text-sm font-bold text-[#1A0A0C] w-8 text-center">{item.qty}</span>
-                      <button onClick={() => updateQty(idx, 0.5)} className="w-7 h-7 rounded-md bg-[#8B1E24] flex items-center justify-center">
-                        <Plus size={12} className="text-white" />
-                      </button>
-                    </div>
+                    <QuantityCounter
+                      value={item.qty}
+                      onDecrement={() => updateQty(idx, -1)}
+                      onIncrement={() => updateQty(idx, 1)}
+                      onChange={(v) => {
+                        if (isNaN(v)) return;
+                        setItems((prev) => prev.map((item, i) =>
+                          i === idx ? { ...item, qty: Math.max(0, v) } : item
+                        ));
+                      }}
+                    />
                     <div className="flex items-center gap-1.5 bg-[#F9F6F2] border border-[#EDE0DB] rounded-lg px-2.5 py-1.5 flex-1">
                       <span className="text-sm text-[#6B4C4F]">₹</span>
                       <input
