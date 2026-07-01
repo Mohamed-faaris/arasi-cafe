@@ -4,6 +4,8 @@ import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import html2pdf from "html2pdf.js";
+import { Share } from "@capacitor/share";
+import { Filesystem, Directory } from "@capacitor/filesystem";
 import "./receipt.css";
 
 function formatCurrency(amount: number): string {
@@ -79,17 +81,38 @@ export default function ReceiptPreviewPage() {
   }, [tx, vendor]);
 
   const handleShare = useCallback(async () => {
-    if (navigator.share) {
-      await navigator.share({ title: "Arasi - Bill", text: `Bill from Arasi for ${tx?.vendorName}` });
-    } else {
-      downloadPDF();
-    }
-  }, [tx, downloadPDF]);
-
-  useEffect(() => {
-    if (tx) {
-      const t = setTimeout(() => downloadPDF(), 800);
-      return () => clearTimeout(t);
+    const el = invoiceRef.current;
+    if (!el || !tx) return;
+    try {
+      const pdf = await html2pdf()
+        .set({
+          margin: 0,
+          filename: `bill-${tx._id?.slice(-6) || "invoice"}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 3, useCORS: true, logging: false },
+          jsPDF: { unit: "mm", format: [210, 297], orientation: "portrait" },
+        })
+        .from(el)
+        .toPdf()
+        .get("pdf");
+      const blob = pdf.output("blob");
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      const saved = await Filesystem.writeFile({
+        path: `bill-${tx._id?.slice(-6)}.pdf`,
+        data: base64,
+        directory: Directory.Cache,
+      });
+      await Share.share({
+        title: "Bill",
+        text: `Bill from Arasi for ${tx.vendorName}`,
+        files: [saved.uri],
+      });
+    } catch {
+      // silently fail
     }
   }, [tx, downloadPDF]);
 
