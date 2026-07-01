@@ -6,6 +6,7 @@ import QuantityCounter from "../app/components/QuantityCounter";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { formatCurrency } from "../lib/utils";
+import { Share } from "@capacitor/share";
 import { toast } from "sonner";
 import type { Doc, Id } from "../convex/_generated/dataModel";
 
@@ -122,8 +123,12 @@ export default function CreateBillPage() {
 
     if (withWhatsApp && selectedVendor) {
       const itemLines = items.map((i) => `  • ${i.name} x${i.qty} ${i.uom || ""} @ ₹${i.price} = ₹${(i.qty * i.price).toFixed(0)}`).join("\n");
-      const msg = encodeURIComponent(`*Arasi - Bill*\n\nCustomer: ${selectedVendor.name}\nDate: ${new Date().toLocaleDateString("en-IN")}\n\n${itemLines}\n\nSubtotal: ₹${subtotal.toFixed(0)}\nTax: ₹${totalTax.toFixed(0)}\n*Total: ₹${grandTotal.toFixed(0)}*\n\nThank you! 🙏`);
-      window.open(`https://wa.me/91${selectedVendor.phone}?text=${msg}`, "_blank");
+      const msg = `*Arasi - Bill*\n\nCustomer: ${selectedVendor.name}\nDate: ${new Date().toLocaleDateString("en-IN")}\n\n${itemLines}\n\nSubtotal: ₹${subtotal.toFixed(0)}\nTax: ₹${totalTax.toFixed(0)}\n*Total: ₹${grandTotal.toFixed(0)}*\n\nThank you! 🙏`;
+      if (window.Capacitor?.isNative) {
+        await Share.share({ title: "Bill", text: msg });
+      } else {
+        window.open(`https://wa.me/91${selectedVendor.phone}?text=${encodeURIComponent(msg)}`, "_blank");
+      }
     }
     navigate("/bills");
   };
