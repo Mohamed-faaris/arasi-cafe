@@ -129,8 +129,16 @@ export default function CreateBillPage() {
       const msg = `*Arasi - Bill*\n\nCustomer: ${selectedVendor.name}\nDate: ${new Date().toLocaleDateString("en-IN")}\n\n${itemLines}\n\nSubtotal: ₹${subtotal.toFixed(0)}\nTax: ₹${totalTax.toFixed(0)}\n*Total: ₹${grandTotal.toFixed(0)}*\n\nThank you! 🙏`;
       if (window.Capacitor?.isNative) {
         await Share.share({ title: "Bill", text: msg });
+      } else if (navigator.canShare?.({ text: msg })) {
+        try {
+          await navigator.share({ title: "Bill", text: msg });
+        } catch (e) {
+          if (e instanceof Error && e.name !== "AbortError") {
+            toast.error("Share failed");
+          }
+        }
       } else {
-        window.open(`https://wa.me/91${selectedVendor.phone}?text=${encodeURIComponent(msg)}`, "_blank");
+        toast.info("Sharing not supported on this browser");
       }
     }
     navigate("/bills");
