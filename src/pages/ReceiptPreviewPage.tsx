@@ -78,6 +78,7 @@ export default function ReceiptPreviewPage() {
 
   const generatePdfBlob = useCallback(async () => {
     const el = invoiceRef.current;
+    console.log("Generating PDF blob...",el);
     if (!el || !tx) return null;
     try {
       const pdf = await html2pdf()
