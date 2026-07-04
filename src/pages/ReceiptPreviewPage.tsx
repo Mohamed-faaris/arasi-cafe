@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
@@ -62,6 +62,19 @@ export default function ReceiptPreviewPage() {
   }, [tx]);
 
   const grandTotal = subtotal + totalCGST + totalSGST;
+  const [scale, setScale] = useState(1);
+  const scaleContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scaleContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      setScale(Math.min(1, w / 800));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const generatePdfBlob = useCallback(async () => {
     const el = invoiceRef.current;
@@ -209,7 +222,8 @@ export default function ReceiptPreviewPage() {
         </div>
       </div>
 
-      <div className="receipt-wrapper" ref={invoiceRef}>
+      <div ref={scaleContainerRef} className="overflow-hidden" style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
+        <div className="receipt-wrapper" ref={invoiceRef}>
         <div className="invoice">
           <div className="header">
             <div className="brand">
@@ -303,6 +317,7 @@ export default function ReceiptPreviewPage() {
 
           <div className="thanks">Thank you for your business!</div>
         </div>
+      </div>
       </div>
     </div>
   );

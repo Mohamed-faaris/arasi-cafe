@@ -1,6 +1,8 @@
 .receipt-wrapper * {
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .receipt-wrapper {
