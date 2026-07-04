@@ -105,15 +105,17 @@ export default function CreateBillPage() {
   const generatePdfBlob = useCallback(async () => {
     const el = invoiceRef.current;
     if (!el) return null;
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.style.position = "fixed";
-    clone.style.left = "0";
-    clone.style.top = "0";
-    clone.style.zIndex = "9999";
-    clone.style.pointerEvents = "none";
-    clone.style.opacity = "0.001";
-    clone.style.background = "#fff";
-    document.body.appendChild(clone);
+
+    el.style.position = "fixed";
+    el.style.left = "0";
+    el.style.top = "0";
+    el.style.opacity = "1";
+    el.style.zIndex = "9999";
+    el.style.pointerEvents = "none";
+    el.style.background = "#fff";
+
+    await new Promise((r) => requestAnimationFrame(r));
+
     try {
       const pdf = await html2pdf()
         .set({
@@ -123,14 +125,15 @@ export default function CreateBillPage() {
           html2canvas: { scale: 3, useCORS: true, logging: false },
           jsPDF: { unit: "mm", format: [210, 297], orientation: "portrait" },
         })
-        .from(clone)
+        .from(el)
         .toPdf()
         .get("pdf");
       return pdf.output("blob") as Blob;
     } catch {
       return null;
     } finally {
-      document.body.removeChild(clone);
+      el.style.opacity = "0";
+      el.style.zIndex = "-9999";
     }
   }, []);
 
