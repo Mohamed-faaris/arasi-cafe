@@ -105,6 +105,15 @@ export default function CreateBillPage() {
   const generatePdfBlob = useCallback(async () => {
     const el = invoiceRef.current;
     if (!el) return null;
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.position = "fixed";
+    clone.style.left = "0";
+    clone.style.top = "0";
+    clone.style.zIndex = "9999";
+    clone.style.pointerEvents = "none";
+    clone.style.opacity = "0.001";
+    clone.style.background = "#fff";
+    document.body.appendChild(clone);
     try {
       const pdf = await html2pdf()
         .set({
@@ -114,12 +123,14 @@ export default function CreateBillPage() {
           html2canvas: { scale: 3, useCORS: true, logging: false },
           jsPDF: { unit: "mm", format: [210, 297], orientation: "portrait" },
         })
-        .from(el)
+        .from(clone)
         .toPdf()
         .get("pdf");
       return pdf.output("blob") as Blob;
     } catch {
       return null;
+    } finally {
+      document.body.removeChild(clone);
     }
   }, []);
 
@@ -196,7 +207,7 @@ export default function CreateBillPage() {
 
   return (
     <>
-      <div ref={invoiceRef} className="absolute -left-[9999px] top-0 w-[210mm] p-[10mm] text-sm font-sans leading-relaxed" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <div ref={invoiceRef} className="fixed left-0 top-0 w-[210mm] p-[10mm] text-sm font-sans leading-relaxed" style={{ zIndex: -9999, opacity: 0, pointerEvents: "none", fontFamily: "system-ui, -apple-system, sans-serif" }}>
         <div style={{ textAlign: "center", marginBottom: 8 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>அரசி</h1>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Milk Agency</h2>
