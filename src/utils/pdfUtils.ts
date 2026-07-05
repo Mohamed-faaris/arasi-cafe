@@ -1,53 +1,7 @@
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { toast } from 'sonner';
-
-const waitForFonts = (): Promise<void> =>
-  document.fonts?.ready
-    ? document.fonts.ready.then(() => {}).catch(() => {})
-    : new Promise((r) => setTimeout(r, 500));
-
-export async function generatePdfBlob(element: HTMLElement): Promise<Blob | null> {
-  if (!element) return null;
-  try {
-    await waitForFonts();
-
-    const canvas = await html2canvas(element, {
-      backgroundColor: '#ffffff',
-      scale: 2,
-      useCORS: true,
-      allowTaint: false,
-      width: element.scrollWidth,
-      height: element.scrollHeight,
-    });
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgWidth = 210;
-    const pageHeight = 297;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-
-    let heightLeft = imgHeight - pageHeight;
-    let position = -pageHeight;
-
-    while (heightLeft > 0) {
-      position -= pageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    return pdf.output('blob');
-  } catch (e) {
-    console.error('PDF generation failed:', e);
-    return null;
-  }
-}
 
 export async function downloadPdf(blob: Blob, fileName: string) {
   if (Capacitor.isNativePlatform()) {

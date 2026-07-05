@@ -4,8 +4,10 @@ import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Capacitor } from "@capacitor/core";
+import { pdf } from "@react-pdf/renderer";
 import ReceiptTemplate from "../components/ReceiptTemplate";
-import { generatePdfBlob, downloadPdf, sharePdf } from "../utils/pdfUtils";
+import ReceiptPDF from "../components/ReceiptPDF";
+import { downloadPdf, sharePdf } from "../utils/pdfUtils";
 
 function formatInvoiceNumber(date: string, seq: number, vendorName?: string): string {
   const d = new Date(date);
@@ -22,7 +24,6 @@ export default function ReceiptPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const templateRef = useRef<HTMLDivElement>(null);
   const sharedRef = useRef(false);
   const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const vendors = useQuery(api.vendors.getVendors) ?? [];
@@ -56,11 +57,37 @@ export default function ReceiptPreviewPage() {
 
   const fileName = useMemo(() => `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`, [tx]);
 
+  const pdfDoc = useMemo(() => {
+    if (!tx) return null;
+    return (
+      <ReceiptPDF
+        vendorName={tx.vendorName}
+        vendorAddress={vendor?.address}
+        vendorPhone={vendor?.phone}
+        vendorGstin={vendor?.gstin}
+        date={tx.date}
+        invoiceNoFormatted={invoiceNoFormatted}
+        isPayment={tx.type === "payment"}
+        items={tx.items}
+        subtotal={subtotal}
+        totalCGST={totalCGST}
+        totalSGST={totalSGST}
+        grandTotal={grandTotal}
+      />
+    );
+  }, [tx, vendor, invoiceNoFormatted, subtotal, totalCGST, totalSGST, grandTotal]);
+
   const getBlob = useCallback(async () => {
-    const el = templateRef.current;
-    if (!el || !tx) return null;
-    return generatePdfBlob(el);
-  }, [tx]);
+    if (!pdfDoc) return null;
+    try {
+      const instance = pdf(pdfDoc);
+      const blob = await instance.toBlob();
+      return blob;
+    } catch (e) {
+      console.error("PDF generation failed:", e);
+      return null;
+    }
+  }, [pdfDoc]);
 
   const handleShare = useCallback(async () => {
     const blob = await getBlob();
@@ -135,7 +162,6 @@ export default function ReceiptPreviewPage() {
 
       <div className="overflow-x-auto p-4">
         <ReceiptTemplate
-          ref={templateRef}
           transaction={tx}
           vendor={vendor}
           invoiceNoFormatted={invoiceNoFormatted}
