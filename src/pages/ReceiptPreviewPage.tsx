@@ -1,13 +1,12 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useMemo, useCallback, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import html2pdf from "html2pdf.js";
-import { Share } from "@capacitor/share";
-import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Capacitor } from "@capacitor/core";
 import { toast } from "sonner";
-import "./receipt.css";
+import ReceiptTemplate from "../components/ReceiptTemplate";
+import { generatePdfBlob, downloadPdf, sharePdf } from "../utils/pdfUtils";
 
 function formatCurrency(amount: number): string {
   return `\u20B9${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -34,17 +33,17 @@ export default function ReceiptPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const invoiceRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
+  const scaleContainerRef = useRef<HTMLDivElement>(null);
   const sharedRef = useRef(false);
+  const [scale, setScale] = useState(1);
   const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const vendors = useQuery(api.vendors.getVendors) ?? [];
 
   const tx = useMemo(() => transactions.find((t) => t._id === id), [transactions, id]);
   const vendor = useMemo(() => (tx ? vendors.find((v) => v._id === tx.vendorId) : null), [vendors, tx]);
 
-  const isPayment = tx?.type === "payment";
-
-  const isNative = window.Capacitor?.getPlatform?.() !== "web" && window.Capacitor?.getPlatform?.() !== undefined;
+  const isNative = Capacitor.isNativePlatform();
 
   const subtotal = useMemo(() => {
     if (!tx?.items) return 0;
@@ -62,8 +61,13 @@ export default function ReceiptPreviewPage() {
   }, [tx]);
 
   const grandTotal = subtotal + totalCGST + totalSGST;
-  const [scale, setScale] = useState(1);
-  const scaleContainerRef = useRef<HTMLDivElement>(null);
+
+  const invoiceNoFormatted = useMemo(() => {
+    if (!tx?.invoiceNo) return "—";
+    return formatInvoiceNumber(tx.date, tx.invoiceNo, tx.vendorName);
+  }, [tx]);
+
+  const fileName = useMemo(() => `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`, [tx]);
 
   useEffect(() => {
     const el = scaleContainerRef.current;
@@ -76,105 +80,37 @@ export default function ReceiptPreviewPage() {
     return () => observer.disconnect();
   }, []);
 
-  const generatePdfBlob = useCallback(async () => {
-    const el = invoiceRef.current;
-    console.log("Generating PDF blob...",el);
-    if (!el || !tx) return null;
-    try {
-      const pdf = await html2pdf()
-        .set({
-          margin: 0,
-          filename: `bill-${tx._id?.slice(-6) || "invoice"}.pdf`,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 3, useCORS: true, logging: false },
-          jsPDF: { unit: "mm", format: [210, 297], orientation: "portrait" },
-        })
-        .from(el)
-        .toPdf()
-        .get("pdf");
-      return pdf.output("blob");
-    } catch (e) {
-      console.error("PDF generation failed:", e);
-      return null;
-    }
-  }, [tx]);
-
-  const downloadPDF = useCallback(async () => {
-    const blob = await generatePdfBlob();
+  const handleShare = useCallback(async () => {
+    const el = captureRef.current;
+    if (!el || !tx) return;
+    const blob = await generatePdfBlob(el);
     if (!blob) return;
+    await sharePdf(blob, fileName, "Bill", `Bill from Arasi for ${tx.vendorName}`);
+  }, [tx, fileName]);
 
+  const handleDownload = useCallback(async () => {
+    const el = captureRef.current;
+    if (!el || !tx) return;
+    const blob = await generatePdfBlob(el);
+    if (!blob) return;
     if (isNative) {
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-      const saved = await Filesystem.writeFile({
-        path: `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`,
-        data: base64,
-        directory: Directory.Cache,
-      });
-      await Share.share({
-        title: "Bill",
-        text: `Bill for ${tx?.vendorName}`,
-        files: [saved.uri],
-      });
+      await downloadPdf(blob, fileName);
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-  }, [tx, generatePdfBlob]);
-
-  const handleShare = useCallback(async () => {
-    const blob = await generatePdfBlob();
-    if (!blob || !tx) return;
-
-    if (isNative) {
-      try {
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-        const saved = await Filesystem.writeFile({
-          path: `bill-${tx._id?.slice(-6)}.pdf`,
-          data: base64,
-          directory: Directory.Cache,
-        });
-        await Share.share({
-          title: "Bill",
-          text: `Bill from Arasi for ${tx.vendorName}`,
-          files: [saved.uri],
-        });
-      } catch (e) {
-        console.error("Share failed:", e);
-      }
-    } else {
-      const file = new File([blob], `bill-${tx._id?.slice(-6)}.pdf`, { type: "application/pdf" });
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: "Bill", text: `Bill from Arasi for ${tx.vendorName}` });
-        } catch (e) {
-          if (e instanceof Error && e.name !== "AbortError") {
-            toast.error("Share failed");
-          }
-        }
-      } else {
-        toast.info("Sharing not supported on this browser");
-      }
-    }
-  }, [tx, generatePdfBlob]);
+  }, [tx, fileName, isNative]);
 
   useEffect(() => {
     if (tx && searchParams.get("share") === "1" && !sharedRef.current) {
       sharedRef.current = true;
-      handleShare();
+      setTimeout(() => handleShare(), 500);
     }
   }, [tx, searchParams, handleShare]);
 
@@ -188,10 +124,6 @@ export default function ReceiptPreviewPage() {
       </div>
     );
   }
-
-  const invoiceNo = tx.invoiceNo
-    ? formatInvoiceNumber(tx.date, tx.invoiceNo, tx.vendorName)
-    : "—";
 
   return (
     <div>
@@ -213,7 +145,7 @@ export default function ReceiptPreviewPage() {
             </button>
             {!isNative && (
               <button
-                onClick={downloadPDF}
+                onClick={handleDownload}
                 className="w-9 h-9 rounded-xl bg-[#8B1E24] flex items-center justify-center"
               >
                 <Download size={16} className="text-white" />
@@ -223,102 +155,29 @@ export default function ReceiptPreviewPage() {
         </div>
       </div>
 
-      <div ref={scaleContainerRef} className="overflow-hidden" style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
-        <div className="receipt-wrapper" ref={invoiceRef}>
-        <div className="invoice">
-          <div className="header">
-            <div className="brand">
-              <img src="/logo.png" alt="Arasi Logo" className="logo" />
-              <div className="brand-text">
-                <h1>அரசி</h1>
-                <h2>Milk Agency</h2>
-                <p>New Bus Stand, Opp. Aruppukottai</p>
-                <p>Mobile : +91 95245 58005</p>
-              </div>
-            </div>
-          </div>
-
-          <hr />
-
-          <div className="top">
-            <div className="bill-info">
-              <table>
-                <tbody>
-                  <tr><td><b>Bill No :</b></td><td>{invoiceNo}</td></tr>
-                  <tr><td><b>Date :</b></td><td>{formatDate(tx.date)}</td></tr>
-                </tbody>
-              </table>
-
-              <div className="bank">
-                <b>Bank Details</b>
-                <p><b>A/C No :</b> 43520985452</p>
-                <p><b>IFSC :</b> SBIN0061171</p>
-                <p>State Bank of India - Aruppukottai</p>
-              </div>
-            </div>
-
-            <div className="qr">
-              <img src="/qr.png" alt="Scan & Pay" />
-              <p><b>Scan & Pay</b></p>
-            </div>
-          </div>
-
-          <div className="customer">
-            <b>Bill To</b>
-            <p>{tx.vendorName}</p>
-            {vendor?.address && <p>{vendor.address}</p>}
-            {vendor?.phone && <p>Phone: {vendor.phone}</p>}
-            {vendor?.gstin && <p>GSTIN: {vendor.gstin}</p>}
-          </div>
-
-          {!isPayment && tx.items && tx.items.length > 0 && (
-            <table className="items">
-              <thead>
-                <tr>
-                  <th>S.No</th>
-                  <th>Product</th>
-                  <th>Qty</th>
-                  <th>Rate</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tx.items.map((item, i) => (
-                  <tr key={i}>
-                    <td>{i + 1}</td>
-                    <td>{item.name}</td>
-                    <td>{item.qty} {item.uom || ""}</td>
-                    <td>{formatCurrency(item.price)}</td>
-                    <td>{formatCurrency(item.qty * item.price)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          <div className="total">
-            <table>
-              <tbody>
-                <tr><td>Subtotal</td><td align="right">{formatCurrency(subtotal)}</td></tr>
-                {totalCGST > 0 && (
-                  <tr><td>CGST @ 2.5%</td><td align="right">{formatCurrency(totalCGST)}</td></tr>
-                )}
-                {totalSGST > 0 && (
-                  <tr><td>SGST @ 2.5%</td><td align="right">{formatCurrency(totalSGST)}</td></tr>
-                )}
-                <tr><td>Discount</td><td align="right">₹0.00</td></tr>
-                <tr className="grand"><td>Grand Total</td><td align="right">{formatCurrency(grandTotal)}</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="footer">
-            <div><div className="line"></div>For அரசி Milk Agency</div>
-          </div>
-
-          <div className="thanks">Thank you for your business!</div>
-        </div>
+      <div ref={scaleContainerRef} className="overflow-hidden flex justify-center" style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
+        <ReceiptTemplate
+          transaction={tx}
+          vendor={vendor}
+          invoiceNoFormatted={invoiceNoFormatted}
+          subtotal={subtotal}
+          totalCGST={totalCGST}
+          totalSGST={totalSGST}
+          grandTotal={grandTotal}
+        />
       </div>
+
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+        <ReceiptTemplate
+          ref={captureRef}
+          transaction={tx}
+          vendor={vendor}
+          invoiceNoFormatted={invoiceNoFormatted}
+          subtotal={subtotal}
+          totalCGST={totalCGST}
+          totalSGST={totalSGST}
+          grandTotal={grandTotal}
+        />
       </div>
     </div>
   );
