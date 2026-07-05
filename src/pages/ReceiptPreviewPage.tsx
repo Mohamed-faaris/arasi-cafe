@@ -1,22 +1,11 @@
-import { useEffect, useMemo, useCallback, useRef, useState } from "react";
+import { useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Capacitor } from "@capacitor/core";
-import { toast } from "sonner";
 import ReceiptTemplate from "../components/ReceiptTemplate";
 import { generatePdfBlob, downloadPdf, sharePdf } from "../utils/pdfUtils";
-
-function formatCurrency(amount: number): string {
-  return `\u20B9${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatDate(dateString: string): string {
-  return new Date(dateString)
-    .toLocaleDateString("en-IN", { day: "numeric", month: "numeric", year: "numeric" })
-    .replace(/\//g, "-");
-}
 
 function formatInvoiceNumber(date: string, seq: number, vendorName?: string): string {
   const d = new Date(date);
@@ -33,10 +22,8 @@ export default function ReceiptPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const captureRef = useRef<HTMLDivElement>(null);
-  const scaleContainerRef = useRef<HTMLDivElement>(null);
+  const templateRef = useRef<HTMLDivElement>(null);
   const sharedRef = useRef(false);
-  const [scale, setScale] = useState(1);
   const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const vendors = useQuery(api.vendors.getVendors) ?? [];
 
@@ -69,30 +56,21 @@ export default function ReceiptPreviewPage() {
 
   const fileName = useMemo(() => `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`, [tx]);
 
-  useEffect(() => {
-    const el = scaleContainerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const w = entry.contentRect.width;
-      setScale(Math.min(1, w / 800));
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const getBlob = useCallback(async () => {
+    const el = templateRef.current;
+    if (!el || !tx) return null;
+    return generatePdfBlob(el);
+  }, [tx]);
 
   const handleShare = useCallback(async () => {
-    const el = captureRef.current;
-    if (!el || !tx) return;
-    const blob = await generatePdfBlob(el);
-    if (!blob) return;
+    const blob = await getBlob();
+    if (!blob || !tx) return;
     await sharePdf(blob, fileName, "Bill", `Bill from Arasi for ${tx.vendorName}`);
-  }, [tx, fileName]);
+  }, [tx, fileName, getBlob]);
 
   const handleDownload = useCallback(async () => {
-    const el = captureRef.current;
-    if (!el || !tx) return;
-    const blob = await generatePdfBlob(el);
-    if (!blob) return;
+    const blob = await getBlob();
+    if (!blob || !tx) return;
     if (isNative) {
       await downloadPdf(blob, fileName);
     } else {
@@ -105,7 +83,7 @@ export default function ReceiptPreviewPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-  }, [tx, fileName, isNative]);
+  }, [tx, fileName, isNative, getBlob]);
 
   useEffect(() => {
     if (tx && searchParams.get("share") === "1" && !sharedRef.current) {
@@ -155,21 +133,9 @@ export default function ReceiptPreviewPage() {
         </div>
       </div>
 
-      <div ref={scaleContainerRef} className="overflow-hidden flex justify-center" style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
+      <div className="overflow-x-auto p-4">
         <ReceiptTemplate
-          transaction={tx}
-          vendor={vendor}
-          invoiceNoFormatted={invoiceNoFormatted}
-          subtotal={subtotal}
-          totalCGST={totalCGST}
-          totalSGST={totalSGST}
-          grandTotal={grandTotal}
-        />
-      </div>
-
-      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
-        <ReceiptTemplate
-          ref={captureRef}
+          ref={templateRef}
           transaction={tx}
           vendor={vendor}
           invoiceNoFormatted={invoiceNoFormatted}
