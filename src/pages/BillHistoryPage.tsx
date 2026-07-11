@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Plus, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, X, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { formatCurrency, formatShortDate } from "../lib/utils";
@@ -65,6 +65,39 @@ export default function BillHistoryPage() {
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  };
+
+  const shareMonth = (group: typeof monthGroups[0]) => {
+    const bills = group.txs.filter((t) => t.type === "bill");
+    const payments = group.txs.filter((t) => t.type === "payment");
+
+    let lines = [`*Arasi - ${group.label}*`, ""];
+
+    if (bills.length > 0) {
+      lines.push("*Bills:*");
+      bills.forEach((t) => {
+        lines.push(`  • ${t.vendorName} - ₹${t.amount.toFixed(0)}`);
+      });
+      lines.push("");
+    }
+
+    if (payments.length > 0) {
+      lines.push("*Payments:*");
+      payments.forEach((t) => {
+        lines.push(`  • ${t.vendorName} - ₹${t.amount.toFixed(0)}`);
+      });
+      lines.push("");
+    }
+
+    lines.push(`Total Bills: ₹${group.billTotal.toFixed(0)}`);
+    lines.push(`Total Payments: ₹${group.paymentTotal.toFixed(0)}`);
+    lines.push(`Balance: ₹${group.balance.toFixed(0)}`);
+    lines.push(`Profit: ₹${group.profit.toFixed(0)}`);
+    lines.push("");
+    lines.push("Thank you! 🙏");
+
+    const msg = encodeURIComponent(lines.join("\n"));
+    window.open(`https://wa.me/?text=${msg}`, "_blank");
   };
 
   return (
@@ -155,11 +188,19 @@ export default function BillHistoryPage() {
                       <p className="text-xs text-[#6B4C4F]">{group.txs.length} transactions</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${group.balance >= 0 ? "text-[#8B1E24]" : "text-[#16A34A]"}`}>
-                      {group.balance >= 0 ? "+" : ""}{formatCurrency(group.balance)}
-                    </p>
-                    <p className="text-[10px] text-[#6B4C4F]">Balance</p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); shareMonth(group); }}
+                      className="w-7 h-7 rounded-lg bg-[#FFF8F4] border border-[#EDE0DB] flex items-center justify-center"
+                    >
+                      <Share2 size={12} className="text-[#6B4C4F]" />
+                    </button>
+                    <div className="text-right">
+                      <p className={`text-sm font-bold ${group.balance >= 0 ? "text-[#8B1E24]" : "text-[#16A34A]"}`}>
+                        {group.balance >= 0 ? "+" : ""}{formatCurrency(group.balance)}
+                      </p>
+                      <p className="text-[10px] text-[#6B4C4F]">Balance</p>
+                    </div>
                   </div>
                 </button>
 
