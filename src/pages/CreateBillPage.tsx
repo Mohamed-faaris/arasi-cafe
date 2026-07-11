@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Search, Plus, X, ChevronDown, Receipt, Camera } from "lucide-react";
+import { ArrowLeft, Search, Plus, X, ChevronDown, Receipt, Camera, CalendarDays } from "lucide-react";
 import QuantityCounter from "../app/components/QuantityCounter";
 import { Switch } from "../app/components/ui/switch";
 import { useQuery, useMutation } from "convex/react";
@@ -43,6 +43,7 @@ export default function CreateBillPage() {
   const [items, setItems] = useState<BillItem[]>([]);
   const [notes, setNotes] = useState("");
   const [roundPrices, setRoundPrices] = useState(false);
+  const [billDate, setBillDate] = useState(new Date().toISOString().split("T")[0]);
 
   const selectedVendor = useMemo(() => vendors.find((v) => v._id === customerId), [vendors, customerId]);
 
@@ -107,7 +108,7 @@ export default function CreateBillPage() {
       vendorName: selectedVendor!.name,
       amount: roundPrices ? (grandTotal < 0.01 ? 0 : Math.ceil(grandTotal)) : grandTotal,
       profit: roundPrices ? Math.ceil(profit) : profit,
-      date: new Date().toISOString(),
+      date: new Date(billDate + "T00:00:00").toISOString(),
       notes: notes.trim() || undefined,
       items: items.map((item) => ({
         productId: item.productId,
@@ -196,6 +197,19 @@ export default function CreateBillPage() {
               )}
             </div>
           )}
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#6B4C4F] mb-2">Bill Date</p>
+          <div className="flex items-center gap-2 bg-[#F9F6F2] rounded-xl px-3.5 py-2.5 border border-[#EDE0DB]">
+            <CalendarDays size={15} className="text-[#6B4C4F]" />
+            <input
+              type="date"
+              value={billDate}
+              onChange={(e) => setBillDate(e.target.value)}
+              className="flex-1 bg-transparent text-sm text-[#1A0A0C] outline-none [color-scheme:light]"
+            />
+          </div>
         </div>
 
         <div>
