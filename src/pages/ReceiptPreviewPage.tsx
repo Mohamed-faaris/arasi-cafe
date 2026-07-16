@@ -3,11 +3,10 @@ import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Download, Share2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Capacitor } from "@capacitor/core";
-import { pdf } from "@react-pdf/renderer";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import ReceiptTemplate from "../components/ReceiptTemplate";
-import ReceiptPDF from "../components/ReceiptPDF";
-import { downloadPdf, sharePdf } from "../utils/pdfUtils";
+import { downloadPdfBlob, sharePdfBlob } from "../utils/pdfUtils";
 
 function formatInvoiceNumber(date: string, seq: number, vendorName?: string): string {
   const d = new Date(date);
@@ -24,14 +23,13 @@ export default function ReceiptPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const receiptRef = useRef<HTMLDivElement>(null);
   const sharedRef = useRef(false);
   const transactions = useQuery(api.transactions.getTransactions) ?? [];
   const vendors = useQuery(api.vendors.getVendors) ?? [];
 
   const tx = useMemo(() => transactions.find((t) => t._id === id), [transactions, id]);
   const vendor = useMemo(() => (tx ? vendors.find((v) => v._id === tx.vendorId) : null), [vendors, tx]);
-
-  const isNative = Capacitor.isNativePlatform();
 
   const subtotal = useMemo(() => {
     if (!tx?.items) return 0;
@@ -57,67 +55,68 @@ export default function ReceiptPreviewPage() {
 
   const fileName = useMemo(() => `bill-${tx?._id?.slice(-6) || "invoice"}.pdf`, [tx]);
 
-  const pdfDoc = useMemo(() => {
-    if (!tx) return null;
-    return (
-      <ReceiptPDF
-        vendorName={tx.vendorName}
-        vendorAddress={vendor?.address}
-        vendorPhone={vendor?.phone}
-        vendorGstin={vendor?.gstin}
-        date={tx.date}
-        invoiceNoFormatted={invoiceNoFormatted}
-        isPayment={tx.type === "payment"}
-        items={tx.items}
-        subtotal={subtotal}
-        totalCGST={totalCGST}
-        totalSGST={totalSGST}
-        grandTotal={grandTotal}
-      />
-    );
-  }, [tx, vendor, invoiceNoFormatted, subtotal, totalCGST, totalSGST, grandTotal]);
-
-  const getBlob = useCallback(async () => {
-    if (!pdfDoc) return null;
+  const generatePdfBlob = useCallback(async (): Promise<Blob | null> => {
+    if (!receiptRef.current) return null;
     try {
-      const instance = pdf(pdfDoc);
-      const blob = await instance.toBlob();
+      const canvas = await html2canvas(receiptRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const blob = pdf.output("blob");
       return blob;
     } catch (e) {
       console.error("PDF generation failed:", e);
       return null;
     }
-  }, [pdfDoc]);
-
-  const handleShare = useCallback(async () => {
-    const blob = await getBlob();
-    if (!blob || !tx) return;
-    await sharePdf(blob, fileName, "Bill", `Bill from Arasi for ${tx.vendorName}`);
-  }, [tx, fileName, getBlob]);
+  }, []);
 
   const handleDownload = useCallback(async () => {
-    const blob = await getBlob();
-    if (!blob || !tx) return;
-    if (isNative) {
-      await downloadPdf(blob, fileName);
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  }, [tx, fileName, isNative, getBlob]);
+    const blob = await generatePdfBlob();
+    if (!blob) return;
+    await downloadPdfBlob(blob, fileName);
+  }, [fileName, generatePdfBlob]);
+
+  const handleShare = useCallback(async () => {
+    const blob = await generatePdfBlob();
+    if (!blob) return;
+    const title = `Bill - ${tx?.vendorName || ""}`;
+    await sharePdfBlob(blob, fileName, title);
+  }, [tx, fileName, generatePdfBlob]);
+
+  const autoDownload = useCallback(async () => {
+    const blob = await generatePdfBlob();
+    if (!blob) return;
+    await downloadPdfBlob(blob, fileName);
+  }, [fileName, generatePdfBlob]);
 
   useEffect(() => {
     if (tx && searchParams.get("share") === "1" && !sharedRef.current) {
       sharedRef.current = true;
-      setTimeout(() => handleShare(), 500);
+      setTimeout(() => autoDownload(), 500);
     }
-  }, [tx, searchParams, handleShare]);
+  }, [tx, searchParams, autoDownload]);
 
   if (!tx) {
     return (
@@ -148,20 +147,19 @@ export default function ReceiptPreviewPage() {
             >
               <Share2 size={16} className="text-white" />
             </button>
-            {!isNative && (
-              <button
-                onClick={handleDownload}
-                className="w-9 h-9 rounded-xl bg-[#8B1E24] flex items-center justify-center"
-              >
-                <Download size={16} className="text-white" />
-              </button>
-            )}
+            <button
+              onClick={handleDownload}
+              className="w-9 h-9 rounded-xl bg-[#8B1E24] flex items-center justify-center"
+            >
+              <Download size={16} className="text-white" />
+            </button>
           </div>
         </div>
       </div>
 
       <div className="overflow-x-auto p-4">
         <ReceiptTemplate
+          ref={receiptRef}
           transaction={tx}
           vendor={vendor}
           invoiceNoFormatted={invoiceNoFormatted}
